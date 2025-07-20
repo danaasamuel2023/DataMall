@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { MessageCircle } from 'lucide-react'
 
 const WhatsAppLink = () => {
-  const whatsappLink = "https://chat.whatsapp.com/IUkmmj90ZGE8Icn9qxyL9E"
+  const whatsappLink = "https://chat.whatsapp.com/HWtr2JohLxSJfEtIb3pn4t?mode=ac_c"
   
   return (
     <div className="flex justify-center items-center p-4">
