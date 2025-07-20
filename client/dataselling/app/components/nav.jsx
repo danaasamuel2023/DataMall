@@ -45,7 +45,7 @@ export default function Navbar() {
 
   const fetchWalletBalance = async (userId, token) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/wallet/balance?userId=${userId}`, {
+      const response = await fetch(`https://datamall.onrender.com/api/wallet/balance?userId=${userId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
