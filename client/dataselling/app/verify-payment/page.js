@@ -33,7 +33,7 @@ function VerifyDepositClient() {
       
       try {
         const response = await axios.get(
-          `http://localhost:5000/api/wallet/verify-payment?reference=${reference}`
+          `https://datamall.onrender.com/api/wallet/verify-payment?reference=${reference}`
         );
         
         if (response.data.success) {

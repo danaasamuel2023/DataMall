@@ -44,7 +44,7 @@ const TelecelBundleCards = () => {
   const fetchNetworkAvailability = async () => {
     try {
       setCheckingAvailability(true);
-      const response = await axios.get('https://bignsah.onrender.com/api/networks-availability');
+      const response = await axios.get('https://datamall.onrender.com/api/networks-availability');
       
       if (response.data.success) {
         setNetworkAvailability(response.data.networks);

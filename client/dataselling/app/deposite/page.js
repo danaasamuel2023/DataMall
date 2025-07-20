@@ -43,7 +43,7 @@ export default function Deposit() {
         setMessage('');
     
         try {
-            const response = await axios.post('http://localhost:5000/api/wallet/add-funds', {
+            const response = await axios.post('https://datamall.onrender.com/api/wallet/add-funds', {
                 userId,
                 email,
                 amount: amountValue,

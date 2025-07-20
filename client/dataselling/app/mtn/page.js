@@ -43,7 +43,7 @@ const MTNBundleCards = () => {
   const fetchNetworkAvailability = async () => {
     try {
       setCheckingAvailability(true);
-      const response = await axios.get('https://bignsah.onrender.com/api/networks-availability');
+      const response = await axios.get('https://datamall.onrender.com/api/networks-availability');
       
       if (response.data.success) {
         setNetworkAvailability(response.data.networks);
@@ -206,7 +206,7 @@ const MTNBundleCards = () => {
       const reference = `DATA-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
       
       // Directly process the order with all required data
-      const processResponse = await axios.post('http://localhost:5000/api/data/process-data-order', {
+      const processResponse = await axios.post('https://datamall.onrender.com/api/data/process-data-order', {
         userId: userId,
         phoneNumber: trimmedPhoneNumber,
         network: bundle.network,

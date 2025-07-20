@@ -27,7 +27,7 @@ function NetworkManagement() {
       setLoading(true);
       const token = localStorage.getItem('token');
       
-      const response = await axios.get('https://bignsah.onrender.com/api/networks-availability', {
+      const response = await axios.get('https://datamall.onrender.com/api/networks-availability', {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -52,7 +52,7 @@ function NetworkManagement() {
       setLoading(true);
       const token = localStorage.getItem('token');
       
-      const response = await axios.post('https://bignsah.onrender.com/api/toggle-network', 
+      const response = await axios.post('https://datamall.onrender.com/api/toggle-network', 
         { 
           network, 
           available: newStatus 
