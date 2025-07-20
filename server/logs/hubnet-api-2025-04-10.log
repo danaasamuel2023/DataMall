@@ -1,0 +1,5 @@
+{"timestamp":"2025-04-10T22:47:29.137Z","type":"REQUEST_RECEIVED","reference":"DATA-1744325249022-9974","data":{"userId":"67d77c19fa004451ed2fbbb2","phoneNumber":"0207896543","network":"TELECEL","dataAmount":1,"price":7,"reference":"DATA-1744325249022-9974"}}
+{"timestamp":"2025-04-10T22:50:54.338Z","type":"REQUEST_RECEIVED","reference":"DATA-1744325454260-3082","data":{"userId":"67d77c19fa004451ed2fbbb2","phoneNumber":"0209876543","network":"TELECEL","dataAmount":1,"price":7,"reference":"DATA-1744325454260-3082"}}
+{"timestamp":"2025-04-10T22:50:55.013Z","type":"ORDER_CREATED","reference":"DATA-1744325454260-3082","data":{"orderId":"67f84b4e83aaab13fa46bbee"}}
+{"timestamp":"2025-04-10T22:50:55.346Z","type":"TELECEL_PROCESSING","reference":"DATA-1744325454260-3082","data":{"message":"Processing TELECEL order without calling Hubnet API","orderId":"67f84b4e83aaab13fa46bbee"}}
+{"timestamp":"2025-04-10T22:50:56.752Z","type":"TELECEL_COMPLETED","reference":"DATA-1744325454260-3082","data":{"orderId":"67f84b4e83aaab13fa46bbee","transactionId":"67f84b5083aaab13fa46bbf2"}}
