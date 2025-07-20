@@ -36,7 +36,7 @@ router.post("/wallet/add-funds", async (req, res) => {
         email,
         amount: amount * 100, // Convert to kobo (smallest unit)
         currency: "GHS", 
-        callback_url: `http://localhost:3001/verify-payment`,
+        callback_url: `https://data-mall.vercel.app/verify-payment`,
         metadata: {
           userId: userId, // Add userId to metadata for more reliable user lookup
           custom_fields: [
