@@ -29,7 +29,7 @@ export default function OrdersList() {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://bignsah.onrender.com/api/orders', {
+      const response = await fetch('https://datamall.onrender.com/api/orders', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
