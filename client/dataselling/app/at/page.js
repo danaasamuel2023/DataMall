@@ -45,7 +45,7 @@ const IShareBundleCards = () => {
   const fetchNetworkAvailability = async () => {
     try {
       setCheckingAvailability(true);
-      const response = await axios.get('https://bignsah.onrender.com/api/networks-availability');
+      const response = await axios.get('https://datamall.onrender.com/api/networks-availability');
       
       if (response.data.success) {
         // Map the response to handle both 'att' and 'ishare' keys
