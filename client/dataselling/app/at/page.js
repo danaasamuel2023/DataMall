@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const AirtelTigoBundleCards = () => {
+const ATTBundleCards = () => {
   const [selectedBundleIndex, setSelectedBundleIndex] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -10,8 +10,9 @@ const AirtelTigoBundleCards = () => {
   const [userId, setUserId] = useState(null);
   const [networkAvailability, setNetworkAvailability] = useState({
     mtn: true,
-    at: true, // Airtel-Tigo
-    telecel: true
+    at: true,
+    telecel: true,
+    att: true // AT&T
   });
   const [checkingAvailability, setCheckingAvailability] = useState(true);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -49,10 +50,10 @@ const AirtelTigoBundleCards = () => {
       if (response.data.success) {
         setNetworkAvailability(response.data.networks);
         
-        // If Airtel-Tigo is out of stock, show message in modal
-        if (!response.data.networks.at) {
+        // If AT&T is out of stock, show message in modal
+        if (!response.data.networks.att) {
           setMessage({ 
-            text: 'Airtel-Tigo bundles are currently out of stock. Please check back later.', 
+            text: 'AT&T bundles are currently out of stock. Please check back later.', 
             type: 'error' 
           });
           setShowErrorModal(true);
@@ -70,40 +71,40 @@ const AirtelTigoBundleCards = () => {
   };
 
   const bundles = [
-    { capacity: '1', mb: '1000', price: '5.00', network: 'at' },
-    { capacity: '2', mb: '2000', price: '10.00', network: 'at' },
-    { capacity: '3', mb: '3000', price: '14.00', network: 'at' },
-    { capacity: '4', mb: '4000', price: '17.80', network: 'at' },
-    { capacity: '5', mb: '5000', price: '23.50', network: 'at' },
-    { capacity: '6', mb: '6000', price: '27.50', network: 'at' },
-    { capacity: '7', mb: '7000', price: '31.90', network: 'at' },
-    { capacity: '8', mb: '8000', price: '35.00', network: 'at' },
-    { capacity: '9', mb: '9000', price: '40.30', network: 'at' },
-    { capacity: '10', mb: '10000', price: '47.0', network: 'at' },
-    { capacity: '12', mb: '12000', price: '53.40', network: 'at' },
-    { capacity: '15', mb: '15000', price: '65.50', network: 'at' },
-    { capacity: '20', mb: '20000', price: '84.00', network: 'at' },
-    { capacity: '25', mb: '25000', price: '104.50', network: 'at' },
-    { capacity: '30', mb: '30000', price: '124.00', network: 'at' },
-    { capacity: '40', mb: '40000', price: '162.00', network: 'at' },
-    { capacity: '50', mb: '50000', price: '200.00', network: 'at' },
-    { capacity: '100', mb: '10000', price: '390.00', network: 'at' },
+    { capacity: '1', mb: '1000', price: '4.15', network: 'att' },
+    { capacity: '2', mb: '2000', price: '8.55', network: 'att' },
+    { capacity: '3', mb: '3000', price: '13.45', network: 'att' },
+    { capacity: '4', mb: '4000', price: '16.70', network: 'att' },
+    { capacity: '5', mb: '5000', price: '19.70', network: 'att' },
+    { capacity: '6', mb: '6000', price: '23.70', network: 'att' },
+    { capacity: '8', mb: '8000', price: '30.70', network: 'att' },
+    { capacity: '10', mb: '10000', price: '38.70', network: 'att' },
+    { capacity: '12', mb: '12000', price: '45.70', network: 'att' },
+    { capacity: '15', mb: '15000', price: '57.70', network: 'att' },
+    { capacity: '25', mb: '25000', price: '95.20', network: 'att' },
+    { capacity: '30', mb: '30000', price: '115.20', network: 'att' },
+    { capacity: '40', mb: '40000', price: '151.20', network: 'att' },
+    { capacity: '50', mb: '50000', price: '190.20', network: 'att' }
   ];
   
-  // Airtel-Tigo Logo SVG with correct branding colors
-  const AirtelTigoLogo = () => (
+  // AT&T Logo SVG with correct branding colors
+  const ATTLogo = () => (
     <svg width="80" height="80" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="100" cy="100" r="85" fill="#0033A0" stroke="#fff" strokeWidth="2"/>
-      <path d="M60 100 Q100 60, 140 100 T60 100" stroke="#E40000" strokeWidth="12" fill="none" strokeLinecap="round"/>
-      <text x="100" y="140" textAnchor="middle" fontFamily="Arial" fontWeight="bold" fontSize="22" fill="white">AirtelTigo</text>
+      <circle cx="100" cy="100" r="85" fill="#00A8E0" stroke="#fff" strokeWidth="2"/>
+      <g transform="translate(100, 100)">
+        <circle r="30" fill="none" stroke="white" strokeWidth="8" />
+        <circle r="50" fill="none" stroke="white" strokeWidth="8" />
+        <circle r="70" fill="none" stroke="white" strokeWidth="8" />
+      </g>
+      <text x="100" y="160" textAnchor="middle" fontFamily="Arial" fontWeight="bold" fontSize="24" fill="white">AT&T</text>
     </svg>
   );
 
   const handleSelectBundle = (index) => {
-    // Only allow selection if Airtel-Tigo is in stock
-    if (!networkAvailability.at) {
+    // Only allow selection if AT&T is in stock
+    if (!networkAvailability.att) {
       setMessage({ 
-        text: 'Airtel-Tigo bundles are currently out of stock. Please check back later.', 
+        text: 'AT&T bundles are currently out of stock. Please check back later.', 
         type: 'error' 
       });
       setShowErrorModal(true);
@@ -118,8 +119,8 @@ const AirtelTigoBundleCards = () => {
   const validatePhoneNumber = (number) => {
     // Trim the number first to remove any whitespace
     const trimmedNumber = number.trim();
-    // Basic Airtel-Tigo Ghana number validation (starts with 026, 027, 056, or 057)
-    const pattern = /^(026|027|056|057)\d{7}$/;
+    // Basic US phone number validation (10 digits)
+    const pattern = /^\d{10}$/;
     return pattern.test(trimmedNumber);
   };
 
@@ -133,10 +134,10 @@ const AirtelTigoBundleCards = () => {
     // Reset message state
     setMessage({ text: '', type: '' });
     
-    // Check if Airtel-Tigo is available before proceeding
-    if (!networkAvailability.at) {
+    // Check if AT&T is available before proceeding
+    if (!networkAvailability.att) {
       setMessage({ 
-        text: 'Airtel-Tigo bundles are currently out of stock. Please check back later.', 
+        text: 'AT&T bundles are currently out of stock. Please check back later.', 
         type: 'error' 
       });
       setShowErrorModal(true);
@@ -156,7 +157,7 @@ const AirtelTigoBundleCards = () => {
     
     if (!validatePhoneNumber(trimmedPhoneNumber)) {
       setMessage({ 
-        text: 'Please enter a valid Airtel-Tigo phone number (must start with 026, 027, 056, or 057 followed by 7 digits)', 
+        text: 'Please enter a valid 10-digit US phone number', 
         type: 'error' 
       });
       setShowErrorModal(true);
@@ -186,9 +187,9 @@ const AirtelTigoBundleCards = () => {
       await fetchNetworkAvailability();
       
       // Double-check availability after fetching
-      if (!networkAvailability.at) {
+      if (!networkAvailability.att) {
         setMessage({ 
-          text: 'Airtel-Tigo bundles are currently out of stock. Please check back later.', 
+          text: 'AT&T bundles are currently out of stock. Please check back later.', 
           type: 'error' 
         });
         setIsLoading(false);
@@ -267,10 +268,10 @@ const AirtelTigoBundleCards = () => {
     <div className="mt-8 p-4 bg-white rounded-lg shadow-md">
       <h2 className="text-lg font-semibold mb-2">Network Status</h2>
       <div className="flex items-center">
-        <div className={`w-3 h-3 rounded-full mr-2 ${networkAvailability.at ? 'bg-green-500' : 'bg-red-500'}`}></div>
-        <span className="mr-1">AirtelTigo:</span>
-        <span className={`text-sm font-semibold ${networkAvailability.at ? 'text-green-600' : 'text-red-600'}`}>
-          {networkAvailability.at ? 'In Stock' : 'Out of Stock'}
+        <div className={`w-3 h-3 rounded-full mr-2 ${networkAvailability.att ? 'bg-green-500' : 'bg-red-500'}`}></div>
+        <span className="mr-1">AT&T:</span>
+        <span className={`text-sm font-semibold ${networkAvailability.att ? 'text-green-600' : 'text-red-600'}`}>
+          {networkAvailability.att ? 'In Stock' : 'Out of Stock'}
         </span>
       </div>
     </div>
@@ -284,7 +285,7 @@ const AirtelTigoBundleCards = () => {
       <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-sm w-full overflow-hidden animate-fadeIn">
           {/* Header */}
-          <div className="bg-blue-700 dark:bg-blue-800 p-3">
+          <div className="bg-blue-600 dark:bg-blue-700 p-3">
             <h2 className="text-lg font-bold text-white text-center">Confirm Purchase</h2>
           </div>
           
@@ -446,7 +447,7 @@ const AirtelTigoBundleCards = () => {
   
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8 text-center">Airtel-Tigo Non-Expiry Bundles</h1>
+      <h1 className="text-3xl font-bold mb-8 text-center">AT&T Non-Expiry Bundles</h1>
       
       {/* We no longer need to show messages in the main page as they all appear in modals */}
 
@@ -460,12 +461,12 @@ const AirtelTigoBundleCards = () => {
           {bundles.map((bundle, index) => (
             <div key={index} className="flex flex-col relative">
               <div 
-                className={`flex flex-col bg-blue-800 overflow-hidden shadow-md transition-transform duration-300 ${networkAvailability.at ? 'cursor-pointer hover:translate-y-[-5px]' : 'cursor-not-allowed hover:translate-y-[-5px]'} ${selectedBundleIndex === index ? 'rounded-t-lg' : 'rounded-lg'}`}
+                className={`flex flex-col bg-blue-600 overflow-hidden shadow-md transition-transform duration-300 ${networkAvailability.att ? 'cursor-pointer hover:translate-y-[-5px]' : 'cursor-not-allowed hover:translate-y-[-5px]'} ${selectedBundleIndex === index ? 'rounded-t-lg' : 'rounded-lg'}`}
                 onClick={() => handleSelectBundle(index)}
               >
                 <div className="flex flex-col items-center justify-center p-5 space-y-3">
                   <div className="w-20 h-20 flex justify-center items-center">
-                    <AirtelTigoLogo />
+                    <ATTLogo />
                   </div>
                   <h3 className="text-xl font-bold text-white">
                     {bundle.capacity} GB
@@ -484,7 +485,7 @@ const AirtelTigoBundleCards = () => {
                 </div>
                 
                 {/* Small out of stock badge in the corner */}
-                {!networkAvailability.at && (
+                {!networkAvailability.att && (
                   <div className="absolute top-2 right-2">
                     <span className="inline-block px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-full shadow-md">
                       OUT OF STOCK
@@ -493,13 +494,13 @@ const AirtelTigoBundleCards = () => {
                 )}
               </div>
               
-              {selectedBundleIndex === index && networkAvailability.at && (
-                <div className="bg-blue-800 p-4 rounded-b-lg shadow-md">
+              {selectedBundleIndex === index && networkAvailability.att && (
+                <div className="bg-blue-600 p-4 rounded-b-lg shadow-md">
                   <div className="mb-4">
                     <input
                       type="tel"
                       className="w-full px-4 py-2 rounded bg-blue-100 text-black placeholder-blue-700 border border-blue-500 focus:outline-none focus:border-blue-800"
-                      placeholder="Enter recipient number (e.g., 0271234567)"
+                      placeholder="Enter recipient number (10 digits)"
                       value={phoneNumber}
                       onChange={handlePhoneNumberChange}
                     />
@@ -536,4 +537,4 @@ const AirtelTigoBundleCards = () => {
   );
 };
 
-export default AirtelTigoBundleCards;
+export default ATTBundleCards;
