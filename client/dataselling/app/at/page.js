@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const ATTBundleCards = () => {
+const IShareBundleCards = () => {
   const [selectedBundleIndex, setSelectedBundleIndex] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -12,7 +12,7 @@ const ATTBundleCards = () => {
     mtn: true,
     at: true,
     telecel: true,
-    att: true // AT&T
+    ishare: true // Changed from att to ishare
   });
   const [checkingAvailability, setCheckingAvailability] = useState(true);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -48,12 +48,17 @@ const ATTBundleCards = () => {
       const response = await axios.get('https://bignsah.onrender.com/api/networks-availability');
       
       if (response.data.success) {
-        setNetworkAvailability(response.data.networks);
+        // Map the response to handle both 'att' and 'ishare' keys
+        const networks = response.data.networks;
+        setNetworkAvailability({
+          ...networks,
+          ishare: networks.att || networks.ishare // Support both keys
+        });
         
-        // If AT&T is out of stock, show message in modal
-        if (!response.data.networks.att) {
+        // If iShare/AT is out of stock, show message in modal
+        if (!networks.att && !networks.ishare) {
           setMessage({ 
-            text: 'AT&T bundles are currently out of stock. Please check back later.', 
+            text: 'iShare bundles are currently out of stock. Please check back later.', 
             type: 'error' 
           });
           setShowErrorModal(true);
@@ -71,40 +76,42 @@ const ATTBundleCards = () => {
   };
 
   const bundles = [
-    { capacity: '1', mb: '1000', price: '4.15', network: 'att' },
-    { capacity: '2', mb: '2000', price: '8.55', network: 'att' },
-    { capacity: '3', mb: '3000', price: '13.45', network: 'att' },
-    { capacity: '4', mb: '4000', price: '16.70', network: 'att' },
-    { capacity: '5', mb: '5000', price: '19.70', network: 'att' },
-    { capacity: '6', mb: '6000', price: '23.70', network: 'att' },
-    { capacity: '8', mb: '8000', price: '30.70', network: 'att' },
-    { capacity: '10', mb: '10000', price: '38.70', network: 'att' },
-    { capacity: '12', mb: '12000', price: '45.70', network: 'att' },
-    { capacity: '15', mb: '15000', price: '57.70', network: 'att' },
-    { capacity: '25', mb: '25000', price: '95.20', network: 'att' },
-    { capacity: '30', mb: '30000', price: '115.20', network: 'att' },
-    { capacity: '40', mb: '40000', price: '151.20', network: 'att' },
-    { capacity: '50', mb: '50000', price: '190.20', network: 'att' }
+    { capacity: '1', mb: '1000', price: '4.15', network: 'ishare' },
+    { capacity: '2', mb: '2000', price: '8.55', network: 'ishare' },
+    { capacity: '3', mb: '3000', price: '13.45', network: 'ishare' },
+    { capacity: '4', mb: '4000', price: '16.70', network: 'ishare' },
+    { capacity: '5', mb: '5000', price: '19.70', network: 'ishare' },
+    { capacity: '6', mb: '6000', price: '23.70', network: 'ishare' },
+    { capacity: '8', mb: '8000', price: '30.70', network: 'ishare' },
+    { capacity: '10', mb: '10000', price: '38.70', network: 'ishare' },
+    { capacity: '12', mb: '12000', price: '45.70', network: 'ishare' },
+    { capacity: '15', mb: '15000', price: '57.70', network: 'ishare' },
+    { capacity: '25', mb: '25000', price: '95.20', network: 'ishare' },
+    { capacity: '30', mb: '30000', price: '115.20', network: 'ishare' },
+    { capacity: '40', mb: '40000', price: '151.20', network: 'ishare' },
+    { capacity: '50', mb: '50000', price: '190.20', network: 'ishare' }
   ];
   
-  // AT&T Logo SVG with correct branding colors
-  const ATTLogo = () => (
+  // iShare Logo SVG - Updated design
+  const IShareLogo = () => (
     <svg width="80" height="80" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
       <circle cx="100" cy="100" r="85" fill="#00A8E0" stroke="#fff" strokeWidth="2"/>
       <g transform="translate(100, 100)">
-        <circle r="30" fill="none" stroke="white" strokeWidth="8" />
-        <circle r="50" fill="none" stroke="white" strokeWidth="8" />
-        <circle r="70" fill="none" stroke="white" strokeWidth="8" />
+        {/* Modern connectivity-inspired design */}
+        <circle r="12" fill="white" />
+        <circle r="30" fill="none" stroke="white" strokeWidth="6" strokeDasharray="10 5" />
+        <circle r="50" fill="none" stroke="white" strokeWidth="6" />
+        <circle r="70" fill="none" stroke="white" strokeWidth="6" strokeDasharray="15 8" />
       </g>
-      <text x="100" y="160" textAnchor="middle" fontFamily="Arial" fontWeight="bold" fontSize="24" fill="white">AT&T</text>
+      <text x="100" y="160" textAnchor="middle" fontFamily="Arial" fontWeight="bold" fontSize="22" fill="white">iShare</text>
     </svg>
   );
 
   const handleSelectBundle = (index) => {
-    // Only allow selection if AT&T is in stock
-    if (!networkAvailability.att) {
+    // Only allow selection if iShare is in stock
+    if (!networkAvailability.ishare) {
       setMessage({ 
-        text: 'AT&T bundles are currently out of stock. Please check back later.', 
+        text: 'iShare bundles are currently out of stock. Please check back later.', 
         type: 'error' 
       });
       setShowErrorModal(true);
@@ -134,10 +141,10 @@ const ATTBundleCards = () => {
     // Reset message state
     setMessage({ text: '', type: '' });
     
-    // Check if AT&T is available before proceeding
-    if (!networkAvailability.att) {
+    // Check if iShare is available before proceeding
+    if (!networkAvailability.ishare) {
       setMessage({ 
-        text: 'AT&T bundles are currently out of stock. Please check back later.', 
+        text: 'iShare bundles are currently out of stock. Please check back later.', 
         type: 'error' 
       });
       setShowErrorModal(true);
@@ -187,9 +194,9 @@ const ATTBundleCards = () => {
       await fetchNetworkAvailability();
       
       // Double-check availability after fetching
-      if (!networkAvailability.att) {
+      if (!networkAvailability.ishare) {
         setMessage({ 
-          text: 'AT&T bundles are currently out of stock. Please check back later.', 
+          text: 'iShare bundles are currently out of stock. Please check back later.', 
           type: 'error' 
         });
         setIsLoading(false);
@@ -210,10 +217,11 @@ const ATTBundleCards = () => {
       const reference = `DATA-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
        
       // Directly process the order with all required data
+      // Note: You may need to update the backend to accept 'ishare' as a network type
       const processResponse = await axios.post('https://datamall.onrender.com/api/data/process-data-order', {
         userId: userId,
         phoneNumber: trimmedPhoneNumber,
-        network: bundle.network,
+        network: 'att', // Keep as 'att' for backend compatibility, or update backend
         dataAmount: bundle.mb/1000, // Store in GB
         price: parseFloat(bundle.price),
         reference: reference
@@ -268,10 +276,10 @@ const ATTBundleCards = () => {
     <div className="mt-8 p-4 bg-white rounded-lg shadow-md">
       <h2 className="text-lg font-semibold mb-2">Network Status</h2>
       <div className="flex items-center">
-        <div className={`w-3 h-3 rounded-full mr-2 ${networkAvailability.att ? 'bg-green-500' : 'bg-red-500'}`}></div>
-        <span className="mr-1">AT&T:</span>
-        <span className={`text-sm font-semibold ${networkAvailability.att ? 'text-green-600' : 'text-red-600'}`}>
-          {networkAvailability.att ? 'In Stock' : 'Out of Stock'}
+        <div className={`w-3 h-3 rounded-full mr-2 ${networkAvailability.ishare ? 'bg-green-500' : 'bg-red-500'}`}></div>
+        <span className="mr-1">iShare:</span>
+        <span className={`text-sm font-semibold ${networkAvailability.ishare ? 'text-green-600' : 'text-red-600'}`}>
+          {networkAvailability.ishare ? 'In Stock' : 'Out of Stock'}
         </span>
       </div>
     </div>
@@ -447,7 +455,7 @@ const ATTBundleCards = () => {
   
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8 text-center">AT&T Non-Expiry Bundles</h1>
+      <h1 className="text-3xl font-bold mb-8 text-center">iShare Non-Expiry Bundles</h1>
       
       {/* We no longer need to show messages in the main page as they all appear in modals */}
 
@@ -461,12 +469,12 @@ const ATTBundleCards = () => {
           {bundles.map((bundle, index) => (
             <div key={index} className="flex flex-col relative">
               <div 
-                className={`flex flex-col bg-blue-600 overflow-hidden shadow-md transition-transform duration-300 ${networkAvailability.att ? 'cursor-pointer hover:translate-y-[-5px]' : 'cursor-not-allowed hover:translate-y-[-5px]'} ${selectedBundleIndex === index ? 'rounded-t-lg' : 'rounded-lg'}`}
+                className={`flex flex-col bg-blue-600 overflow-hidden shadow-md transition-transform duration-300 ${networkAvailability.ishare ? 'cursor-pointer hover:translate-y-[-5px]' : 'cursor-not-allowed hover:translate-y-[-5px]'} ${selectedBundleIndex === index ? 'rounded-t-lg' : 'rounded-lg'}`}
                 onClick={() => handleSelectBundle(index)}
               >
                 <div className="flex flex-col items-center justify-center p-5 space-y-3">
                   <div className="w-20 h-20 flex justify-center items-center">
-                    <ATTLogo />
+                    <IShareLogo />
                   </div>
                   <h3 className="text-xl font-bold text-white">
                     {bundle.capacity} GB
@@ -485,7 +493,7 @@ const ATTBundleCards = () => {
                 </div>
                 
                 {/* Small out of stock badge in the corner */}
-                {!networkAvailability.att && (
+                {!networkAvailability.ishare && (
                   <div className="absolute top-2 right-2">
                     <span className="inline-block px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-full shadow-md">
                       OUT OF STOCK
@@ -494,7 +502,7 @@ const ATTBundleCards = () => {
                 )}
               </div>
               
-              {selectedBundleIndex === index && networkAvailability.att && (
+              {selectedBundleIndex === index && networkAvailability.ishare && (
                 <div className="bg-blue-600 p-4 rounded-b-lg shadow-md">
                   <div className="mb-4">
                     <input
@@ -537,4 +545,4 @@ const ATTBundleCards = () => {
   );
 };
 
-export default ATTBundleCards;
+export default IShareBundleCards;
