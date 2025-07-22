@@ -99,7 +99,7 @@ export default function Navbar() {
     },
     {
       id: 'at',
-      name: 'AT&T',
+      name: 'AT',
       icon: <Zap size={16} />,
       color: 'text-blue-600',
       bgColor: 'hover:bg-blue-50 dark:hover:bg-blue-900/30'
@@ -111,13 +111,7 @@ export default function Navbar() {
       color: 'text-red-600',
       bgColor: 'hover:bg-red-50 dark:hover:bg-red-900/30'
     },
-    {
-      id: 'afa',
-      name: 'AFA',
-      icon: <Star size={16} />,
-      color: 'text-green-600',
-      bgColor: 'hover:bg-green-50 dark:hover:bg-green-900/30'
-    }
+  
   ];
 
   return (
