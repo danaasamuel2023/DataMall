@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Menu, X, Home, CreditCard, List, User, LogOut, Users, Wallet, ShoppingBag, TrendingUp, ChevronRight } from 'lucide-react';
+import { Menu, X, Home, CreditCard, List, User, LogOut, Users, Wallet, ShoppingBag, TrendingUp, ChevronRight, Globe, Zap, Shield, Star } from 'lucide-react';
 
 export default function Navbar() {
   const router = useRouter();
@@ -13,6 +13,7 @@ export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [showLogoutMessage, setShowLogoutMessage] = useState(false);
+  const [showNetworksDropdown, setShowNetworksDropdown] = useState(false);
 
   useEffect(() => {
     // Check if user is logged in
@@ -37,11 +38,15 @@ export default function Navbar() {
       if (isMobileMenuOpen && !event.target.closest('#mobile-menu') && !event.target.closest('#menu-button')) {
         setIsMobileMenuOpen(false);
       }
+      // Close dropdown when clicking outside
+      if (showNetworksDropdown && !event.target.closest('#networks-dropdown')) {
+        setShowNetworksDropdown(false);
+      }
     };
     
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [isMobileMenuOpen]);
+  }, [isMobileMenuOpen, showNetworksDropdown]);
 
   const fetchWalletBalance = async (userId, token) => {
     try {
@@ -83,6 +88,38 @@ export default function Navbar() {
 
   const isAdmin = userRole === 'adm';
 
+  // Network providers configuration
+  const networkProviders = [
+    {
+      id: 'mtn',
+      name: 'MTN',
+      icon: <Globe size={16} />,
+      color: 'text-yellow-600',
+      bgColor: 'hover:bg-yellow-50 dark:hover:bg-yellow-900/30'
+    },
+    {
+      id: 'at',
+      name: 'AT&T',
+      icon: <Zap size={16} />,
+      color: 'text-blue-600',
+      bgColor: 'hover:bg-blue-50 dark:hover:bg-blue-900/30'
+    },
+    {
+      id: 'telecel',
+      name: 'Telecel',
+      icon: <Shield size={16} />,
+      color: 'text-red-600',
+      bgColor: 'hover:bg-red-50 dark:hover:bg-red-900/30'
+    },
+    {
+      id: 'afa',
+      name: 'AFA',
+      icon: <Star size={16} />,
+      color: 'text-green-600',
+      bgColor: 'hover:bg-green-50 dark:hover:bg-green-900/30'
+    }
+  ];
+
   return (
     <>
       {/* Logout success message */}
@@ -118,6 +155,36 @@ export default function Navbar() {
                   <Home size={18} className="mr-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors" />
                   Dashboard
                 </Link>
+                
+                {/* Networks Dropdown */}
+                <div className="relative" id="networks-dropdown">
+                  <button
+                    onClick={() => setShowNetworksDropdown(!showNetworksDropdown)}
+                    className="text-gray-700 dark:text-gray-200 hover:bg-purple-50 dark:hover:bg-purple-900/30 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center group"
+                  >
+                    <ShoppingBag size={18} className="mr-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors" />
+                    Buy Data
+                    <ChevronRight size={16} className={`ml-1 transition-transform ${showNetworksDropdown ? 'rotate-90' : ''}`} />
+                  </button>
+                  
+                  {/* Dropdown Menu */}
+                  {showNetworksDropdown && (
+                    <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                      {networkProviders.map((provider) => (
+                        <Link
+                          key={provider.id}
+                          href={`/${provider.id}`}
+                          className={`flex items-center px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 ${provider.bgColor} transition-all duration-200`}
+                          onClick={() => setShowNetworksDropdown(false)}
+                        >
+                          <span className={`${provider.color} mr-3`}>{provider.icon}</span>
+                          {provider.name}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
                 <Link href="/deposite" className="text-gray-700 dark:text-gray-200 hover:bg-purple-50 dark:hover:bg-purple-900/30 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center group">
                   <Wallet size={18} className="mr-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors" />
                   Top Up
@@ -269,6 +336,25 @@ export default function Navbar() {
               <Home size={18} className="mr-3 text-purple-600 dark:text-purple-400" />
               Dashboard
             </Link>
+            
+            {/* Networks Section in Mobile */}
+            <div className="py-2">
+              <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Buy Data
+              </div>
+              {networkProviders.map((provider) => (
+                <Link
+                  key={provider.id}
+                  href={`/${provider.id}`}
+                  className={`flex items-center text-gray-700 dark:text-gray-200 ${provider.bgColor} px-4 py-3 rounded-lg text-base font-medium transition-all duration-200`}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <span className={`${provider.color} mr-3`}>{provider.icon}</span>
+                  {provider.name}
+                </Link>
+              ))}
+            </div>
+            
             <Link 
               href="/deposite" 
               className="flex items-center text-gray-700 dark:text-gray-200 hover:bg-purple-50 dark:hover:bg-purple-900/30 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200"
