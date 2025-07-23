@@ -58,21 +58,7 @@ const NetworkProviderCard = ({ provider }) => {
         </div>
       )
     },
-    afa: {
-      name: "AFA Registration",
-      gradient: "from-green-500 to-emerald-600",
-      shadowColor: "shadow-green-500/30",
-      icon: <Star size={28} className="text-white" />,
-      badge: "Quick Setup",
-      badgeColor: "bg-emerald-600",
-      features: ["Instant approval", "Secure process", "Full support"],
-      logo: (
-        <div className="relative">
-          <div className="text-3xl font-black text-white italic">AFA</div>
-          <div className="absolute -bottom-2 left-0 right-0 h-0.5 bg-white/50"></div>
-        </div>
-      )
-    }
+   
   };
   
   const details = providerDetails[provider];
