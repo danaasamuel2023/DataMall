@@ -4,7 +4,7 @@ import { Phone } from 'lucide-react';
 
 const Footer = () => {
   const adminPhone = "+233550447846";
-  const whatsappLink = `https://chat.whatsapp.com/IUkmmj90ZGE8Icn9qxyL9E`;
+  const whatsappLink = `https://chat.whatsapp.com/HWtr2JohLxSJfEtIb3pn4t?mode=ac_c`;
 
   return (
     <footer className="bg-black text-white py-8">
