@@ -57,8 +57,7 @@ const NetworkProviderCard = ({ provider }) => {
           <div className="absolute -top-1 -right-2 text-xs text-yellow-300">★</div>
         </div>
       )
-    },
-   
+    }
   };
   
   const details = providerDetails[provider];
@@ -260,11 +259,10 @@ const ServicesNetwork = () => {
           </p>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 justify-items-center max-w-4xl mx-auto">
           <NetworkProviderCard provider="mtn" />
           <NetworkProviderCard provider="at" />
           <NetworkProviderCard provider="telecel" />
-          <NetworkProviderCard provider="afa" />
         </div>
         
         {/* CTA Section for logged in users */}
