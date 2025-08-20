@@ -1,33 +1,34 @@
 const mongoose = require('mongoose');
 
+// ============ USER SCHEMA ============
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   phoneNumber: {
     type: String,
-    // unique: true,  // Only if you need uniqueness
-    sparse: true,  // This will only apply the index to documents that have the field
-    default: undefined  // This ensures the field isn't set if not provided
+    sparse: true,
+    default: undefined
   },
   role: { 
     type: String, 
     enum: ['user', 'admin', 'agent'], 
     default: 'user' 
   },
-  walletBalance: { type: Number, default: 0 }, // Wallet balance field
+  walletBalance: { type: Number, default: 0 },
   userCapacity: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
 });
 
+// ============ DATA ORDER SCHEMA ============
 const DataOrderSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserNASH', required: true },
   network: { type: String, required: true, enum: ['mtn', 'Tigo', 'Airtel','at','TELECEL','afa-registration'] },
   dataAmount: { type: Number, required: true },
-  price: { type: Number, required: true }, // Selling price
-  providerCost: { type: Number }, // Cost from provider
-  profit: { type: Number }, // Profit made on this order
-  profitMargin: { type: Number }, // Profit percentage
+  price: { type: Number, required: true },
+  providerCost: { type: Number },
+  profit: { type: Number },
+  profitMargin: { type: Number },
   phoneNumber: { type: String, required: true },
   reference: { type: String, required: true, unique: true },
   status: { type: String, enum: ['pending','processing','completed', 'failed'], default: 'pending' },
@@ -43,16 +44,17 @@ const DataOrderSchema = new mongoose.Schema({
   failureReason: { type: String }
 });
 
+// ============ TRANSACTION SCHEMA ============
 const TransactionSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "UserNASH",
       required: true,
     },
     type: {
       type: String,
-      enum: ["deposit", "purchase", "refund"],
+      enum: ["deposit", "purchase", "refund", "commission"],
       required: true,
     },
     amount: {
@@ -85,7 +87,7 @@ const TransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Add this to your schema.js file
+// ============ NETWORK AVAILABILITY SCHEMA ============
 const NetworkAvailabilitySchema = new mongoose.Schema({
   network: { 
     type: String, 
@@ -103,7 +105,7 @@ const NetworkAvailabilitySchema = new mongoose.Schema({
   }
 });
 
-// NEW: Provider Pricing Schema - to store provider costs
+// ============ PROVIDER PRICING SCHEMA ============
 const ProviderPricingSchema = new mongoose.Schema({
   network: {
     type: String,
@@ -131,7 +133,7 @@ const ProviderPricingSchema = new mongoose.Schema({
     default: 0
   },
   profitMargin: {
-    type: Number, // Percentage
+    type: Number,
     default: 0
   },
   isActive: {
@@ -144,10 +146,7 @@ const ProviderPricingSchema = new mongoose.Schema({
   }
 });
 
-// Create compound index for efficient lookups
-ProviderPricingSchema.index({ network: 1, capacity: 1 });
-
-// NEW: Profit Analytics Schema - for aggregated profit data
+// ============ PROFIT ANALYTICS SCHEMA ============
 const ProfitAnalyticsSchema = new mongoose.Schema({
   date: {
     type: Date,
@@ -187,20 +186,163 @@ const ProfitAnalyticsSchema = new mongoose.Schema({
   }]
 });
 
-// Create compound index for date and network
-ProfitAnalyticsSchema.index({ date: 1, network: 1 }, { unique: true });
+// ============ WEEKLY PROFIT SCHEMA ============
+const WeeklyProfitSchema = new mongoose.Schema({
+  weekStartDate: { 
+    type: Date, 
+    required: true 
+  },
+  weekEndDate: { 
+    type: Date, 
+    required: true 
+  },
+  weekNumber: { 
+    type: Number, 
+    required: true 
+  },
+  year: { 
+    type: Number, 
+    required: true 
+  },
+  totalOrders: { 
+    type: Number, 
+    default: 0 
+  },
+  totalRevenue: { 
+    type: Number, 
+    default: 0 
+  },
+  totalCost: { 
+    type: Number, 
+    default: 0 
+  },
+  totalProfit: { 
+    type: Number, 
+    default: 0 
+  },
+  isWithdrawn: { 
+    type: Boolean, 
+    default: false 
+  },
+  withdrawalId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'AdminWithdrawal' 
+  },
+  withdrawnAt: { 
+    type: Date 
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  }
+});
 
-// Create the models
+// ============ ADMIN WITHDRAWAL SCHEMA ============
+const AdminWithdrawalSchema = new mongoose.Schema({
+  amount: { 
+    type: Number, 
+    required: true,
+    min: 1
+  },
+  weeklyProfitId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'WeeklyProfit',
+    required: true
+  },
+  weekStartDate: { 
+    type: Date,
+    required: true
+  },
+  weekEndDate: { 
+    type: Date,
+    required: true
+  },
+  bankDetails: { 
+    type: String, 
+    required: true 
+  },
+  status: { 
+    type: String, 
+    enum: ['pending', 'completed', 'cancelled'], 
+    default: 'pending' 
+  },
+  notes: { 
+    type: String 
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  },
+  completedAt: { 
+    type: Date 
+  },
+  cancelledAt: {
+    type: Date
+  },
+  cancelReason: {
+    type: String
+  }
+});
+
+// ============ USER DAILY EARNINGS SCHEMA (NEW) ============
+const UserDailyEarningsSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'UserNASH',
+    required: true
+  },
+  date: {
+    type: Date,
+    required: true
+  },
+  totalOrders: {
+    type: Number,
+    default: 0
+  },
+  totalRevenue: {
+    type: Number,
+    default: 0
+  },
+  totalProfit: {
+    type: Number,
+    default: 0
+  },
+  commission: {
+    type: Number,
+    default: 0
+  },
+  role: {
+    type: String,
+    enum: ['user', 'admin', 'agent']
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// ============ CREATE INDEXES ============
+ProviderPricingSchema.index({ network: 1, capacity: 1 });
+ProfitAnalyticsSchema.index({ date: 1, network: 1 }, { unique: true });
+WeeklyProfitSchema.index({ weekStartDate: 1, weekEndDate: 1 }, { unique: true });
+WeeklyProfitSchema.index({ year: 1, weekNumber: 1 });
+UserDailyEarningsSchema.index({ userId: 1, date: 1 }, { unique: true });
+
+// ============ CREATE MODELS ============
 const User = mongoose.model('UserNASH', UserSchema);
 const DataOrder = mongoose.model('DataOrder', DataOrderSchema);
 const Transaction = mongoose.model("TransactionNASH", TransactionSchema);
 const NetworkAvailability = mongoose.model('NetworkAvailability', NetworkAvailabilitySchema);
 const ProviderPricing = mongoose.model('ProviderPricing', ProviderPricingSchema);
 const ProfitAnalytics = mongoose.model('ProfitAnalytics', ProfitAnalyticsSchema);
+const WeeklyProfit = mongoose.model('WeeklyProfit', WeeklyProfitSchema);
+const AdminWithdrawal = mongoose.model('AdminWithdrawal', AdminWithdrawalSchema);
+const UserDailyEarnings = mongoose.model('UserDailyEarnings', UserDailyEarningsSchema);
 
-// Helper function to initialize MTN pricing data
+// ============ HELPER FUNCTIONS ============
+
+// Initialize MTN pricing data
 async function initializeMTNPricing() {
-  // Provider prices (from DATA_PACKAGES)
   const providerPrices = [
     { capacity: '1', mb: '1000', price: 4.50, network: 'mtn' },
     { capacity: '2', mb: '2000', price: 8.90, network: 'mtn' },
@@ -219,7 +361,6 @@ async function initializeMTNPricing() {
     { capacity: '100', mb: '100000', price: 406.00, network: 'mtn' }
   ];
 
-  // Your selling prices
   const sellingPrices = [
     { capacity: '1', mb: '1000', price: 4.70, network: 'mtn' },
     { capacity: '2', mb: '2000', price: 9.40, network: 'mtn' },
@@ -238,7 +379,6 @@ async function initializeMTNPricing() {
     { capacity: '100', mb: '100000', price: 407.20, network: 'mtn' }
   ];
 
-  // Combine and calculate profits
   for (const providerItem of providerPrices) {
     const sellingItem = sellingPrices.find(s => s.capacity === providerItem.capacity);
     
@@ -270,7 +410,7 @@ async function initializeMTNPricing() {
   console.log('MTN pricing data initialized successfully');
 }
 
-// Function to get pricing info for an order
+// Get pricing info for a network and capacity
 async function getPricingInfo(network, capacity) {
   const pricing = await ProviderPricing.findOne({ 
     network: network.toLowerCase(), 
@@ -290,13 +430,11 @@ async function getPricingInfo(network, capacity) {
   };
 }
 
-// Update function for creating data orders with profit tracking
+// Create data order with profit tracking
 async function createDataOrderWithProfit(orderData) {
   try {
-    // Get pricing information
     const pricingInfo = await getPricingInfo(orderData.network, orderData.capacity);
     
-    // Create order with profit information
     const order = new DataOrder({
       ...orderData,
       price: pricingInfo.sellingPrice,
@@ -307,9 +445,10 @@ async function createDataOrderWithProfit(orderData) {
     
     await order.save();
     
-    // Update daily analytics if order is completed
     if (order.status === 'completed') {
       await updateDailyAnalytics(order);
+      await updateWeeklyProfit(order);
+      await trackUserEarnings(order);
     }
     
     return order;
@@ -319,7 +458,7 @@ async function createDataOrderWithProfit(orderData) {
   }
 }
 
-// Function to update daily analytics
+// Update daily analytics
 async function updateDailyAnalytics(order) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -332,11 +471,10 @@ async function updateDailyAnalytics(order) {
   if (analytics) {
     analytics.totalOrders += 1;
     analytics.totalRevenue += order.price;
-    analytics.totalCost += order.providerCost;
-    analytics.totalProfit += order.profit;
+    analytics.totalCost += order.providerCost || 0;
+    analytics.totalProfit += order.profit || 0;
     analytics.averageProfitMargin = (analytics.totalProfit / analytics.totalRevenue) * 100;
     
-    // Update capacity breakdown
     const capacityIndex = analytics.ordersByCapacity.findIndex(
       item => item.capacity === order.dataAmount.toString()
     );
@@ -344,41 +482,166 @@ async function updateDailyAnalytics(order) {
     if (capacityIndex > -1) {
       analytics.ordersByCapacity[capacityIndex].count += 1;
       analytics.ordersByCapacity[capacityIndex].revenue += order.price;
-      analytics.ordersByCapacity[capacityIndex].cost += order.providerCost;
-      analytics.ordersByCapacity[capacityIndex].profit += order.profit;
+      analytics.ordersByCapacity[capacityIndex].cost += order.providerCost || 0;
+      analytics.ordersByCapacity[capacityIndex].profit += order.profit || 0;
     } else {
       analytics.ordersByCapacity.push({
         capacity: order.dataAmount.toString(),
         count: 1,
         revenue: order.price,
-        cost: order.providerCost,
-        profit: order.profit
+        cost: order.providerCost || 0,
+        profit: order.profit || 0
       });
     }
     
     await analytics.save();
   } else {
-    // Create new analytics entry
     await ProfitAnalytics.create({
       date: today,
       network: order.network,
       totalOrders: 1,
       totalRevenue: order.price,
-      totalCost: order.providerCost,
-      totalProfit: order.profit,
-      averageProfitMargin: (order.profit / order.price) * 100,
+      totalCost: order.providerCost || 0,
+      totalProfit: order.profit || 0,
+      averageProfitMargin: ((order.profit || 0) / order.price) * 100,
       ordersByCapacity: [{
         capacity: order.dataAmount.toString(),
         count: 1,
         revenue: order.price,
-        cost: order.providerCost,
-        profit: order.profit
+        cost: order.providerCost || 0,
+        profit: order.profit || 0
       }]
     });
   }
 }
 
-// Analytics query functions
+// Update weekly profit tracking
+async function updateWeeklyProfit(order) {
+  const orderDate = new Date(order.createdAt);
+  
+  // Calculate week start (Monday) and end (Sunday)
+  const dayOfWeek = orderDate.getDay();
+  const diff = orderDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+  
+  const weekStart = new Date(orderDate.setDate(diff));
+  weekStart.setHours(0, 0, 0, 0);
+  
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  
+  // Calculate week number
+  const startOfYear = new Date(weekStart.getFullYear(), 0, 1);
+  const weekNumber = Math.ceil(((weekStart - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7);
+  
+  // Update or create weekly profit record
+  const weeklyProfit = await WeeklyProfit.findOne({
+    weekStartDate: weekStart,
+    weekEndDate: weekEnd
+  });
+  
+  if (weeklyProfit) {
+    weeklyProfit.totalOrders += 1;
+    weeklyProfit.totalRevenue += order.price;
+    weeklyProfit.totalCost += order.providerCost || 0;
+    weeklyProfit.totalProfit += order.profit || 0;
+    await weeklyProfit.save();
+  } else {
+    await WeeklyProfit.create({
+      weekStartDate: weekStart,
+      weekEndDate: weekEnd,
+      weekNumber: weekNumber,
+      year: weekStart.getFullYear(),
+      totalOrders: 1,
+      totalRevenue: order.price,
+      totalCost: order.providerCost || 0,
+      totalProfit: order.profit || 0,
+      isWithdrawn: false
+    });
+  }
+}
+
+// Track user earnings
+async function trackUserEarnings(order) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const user = await User.findById(order.userId);
+  
+  // Calculate commission for agents (5%)
+  const commission = user.role === 'agent' ? order.price * 0.05 : 0;
+  
+  const earnings = await UserDailyEarnings.findOne({
+    userId: order.userId,
+    date: today
+  });
+  
+  if (earnings) {
+    earnings.totalOrders += 1;
+    earnings.totalRevenue += order.price;
+    earnings.totalProfit += order.profit || 0;
+    earnings.commission += commission;
+    await earnings.save();
+  } else {
+    await UserDailyEarnings.create({
+      userId: order.userId,
+      date: today,
+      totalOrders: 1,
+      totalRevenue: order.price,
+      totalProfit: order.profit || 0,
+      commission: commission,
+      role: user.role
+    });
+  }
+  
+  // Credit commission to agent's wallet
+  if (commission > 0) {
+    user.walletBalance += commission;
+    await user.save();
+    
+    await Transaction.create({
+      userId: order.userId,
+      type: 'commission',
+      amount: commission,
+      description: `Commission for order ${order.reference}`,
+      reference: order.reference,
+      status: 'completed',
+      balanceAfter: user.walletBalance
+    });
+  }
+}
+
+// Get user earnings summary
+async function getUserEarningsSummary(userId, startDate, endDate) {
+  const earnings = await UserDailyEarnings.aggregate([
+    {
+      $match: {
+        userId: mongoose.Types.ObjectId(userId),
+        date: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: null,
+        totalOrders: { $sum: '$totalOrders' },
+        totalRevenue: { $sum: '$totalRevenue' },
+        totalProfit: { $sum: '$totalProfit' },
+        totalCommission: { $sum: '$commission' },
+        daysActive: { $sum: 1 }
+      }
+    }
+  ]);
+  
+  return earnings[0] || {
+    totalOrders: 0,
+    totalRevenue: 0,
+    totalProfit: 0,
+    totalCommission: 0,
+    daysActive: 0
+  };
+}
+
+// Get daily profit report
 async function getDailyProfitReport(date, network = null) {
   const query = { date };
   if (network) query.network = network;
@@ -386,6 +649,7 @@ async function getDailyProfitReport(date, network = null) {
   return await ProfitAnalytics.find(query);
 }
 
+// Get monthly profit summary
 async function getMonthlyProfitSummary(year, month, network = null) {
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0, 23, 59, 59);
@@ -414,14 +678,14 @@ async function getMonthlyProfitSummary(year, month, network = null) {
   return summary;
 }
 
-// Get best performing packages by profit
+// Get best performing packages
 async function getBestPerformingPackages(network = 'mtn', limit = 5) {
   const result = await DataOrder.aggregate([
     { 
       $match: { 
         network: network,
         status: 'completed',
-        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days
+        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
       } 
     },
     {
@@ -439,20 +703,28 @@ async function getBestPerformingPackages(network = 'mtn', limit = 5) {
   return result;
 }
 
-// Export everything
+// ============ EXPORTS ============
 module.exports = { 
+  // Models
   User, 
   DataOrder, 
   Transaction, 
   NetworkAvailability,
   ProviderPricing,
   ProfitAnalytics,
+  WeeklyProfit,
+  AdminWithdrawal,
+  UserDailyEarnings,
+  
   // Helper functions
   initializeMTNPricing,
   getPricingInfo,
   createDataOrderWithProfit,
   updateDailyAnalytics,
+  updateWeeklyProfit,
+  trackUserEarnings,
+  getUserEarningsSummary,
   getDailyProfitReport,
   getMonthlyProfitSummary,
   getBestPerformingPackages
-};
+};``

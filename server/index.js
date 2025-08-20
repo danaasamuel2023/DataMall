@@ -7,7 +7,8 @@ const dataOrderRoutes = require('./routes/placeOrder.js');
 const Depoite = require('./routes/deposite.js');
 const adminOrder = require('./routes/ordermanagement.js')
 const Profits = require('./routes/profits.js')
-dotenv.config();
+const withdrawal = require('./withdrawal/withdrawal.js');
+dotenv.config(); 
 
 // Initialize Express app
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api/data', dataOrderRoutes);
 app.use('/api', Depoite);
 app.use('/api', adminOrder);
 app.use('/api', Profits);
+app.use('/api/admin-withdrawal', withdrawal);
 
 // Default Route
 app.get('/', (req, res) => {

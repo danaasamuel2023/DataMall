@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { 
   DataOrder, 
   User, 
@@ -7,10 +8,13 @@ const {
   NetworkAvailability,
   ProviderPricing,
   ProfitAnalytics,
+  UserDailyEarnings,
   initializeMTNPricing,
   getDailyProfitReport,
   getMonthlyProfitSummary,
-  getBestPerformingPackages
+  getBestPerformingPackages,
+  trackUserEarnings,
+  getUserEarningsSummary
 } = require('../schema/schema');
 const { auth, authorize } = require('../middleware/page');
 
@@ -22,7 +26,7 @@ const errorLogger = (error, route) => {
   });
 };
 
-// ====== PROFIT TRACKING ROUTES ======
+// ====== ADMIN PROFIT TRACKING ROUTES ======
 
 // Initialize MTN pricing (run once or when updating prices)
 router.post('/profit/initialize-pricing', auth, authorize('admin'), async (req, res) => {
@@ -139,7 +143,7 @@ router.put('/profit/pricing/:id', auth, authorize('admin'), async (req, res) => 
   }
 });
 
-// Get daily profit report
+// Get daily profit report (Admin)
 router.get('/profit/daily-report', auth, authorize('admin'), async (req, res) => {
   try {
     const { date, network } = req.query;
@@ -203,7 +207,7 @@ router.get('/profit/daily-report', auth, authorize('admin'), async (req, res) =>
   }
 });
 
-// Get monthly profit summary
+// Get monthly profit summary (Admin)
 router.get('/profit/monthly-summary', auth, authorize('admin'), async (req, res) => {
   try {
     const { year, month, network } = req.query;
@@ -258,7 +262,7 @@ router.get('/profit/monthly-summary', auth, authorize('admin'), async (req, res)
   }
 });
 
-// Get best performing packages
+// Get best performing packages (Admin)
 router.get('/profit/best-packages', auth, authorize('admin'), async (req, res) => {
   try {
     const { network = 'mtn', limit = 10, days = 30 } = req.query;
@@ -324,7 +328,7 @@ router.get('/profit/best-packages', auth, authorize('admin'), async (req, res) =
   }
 });
 
-// Get profit trends
+// Get profit trends (Admin)
 router.get('/profit/trends', auth, authorize('admin'), async (req, res) => {
   try {
     const { days = 30, network } = req.query;
@@ -374,7 +378,7 @@ router.get('/profit/trends', auth, authorize('admin'), async (req, res) => {
   }
 });
 
-// Get profit by user segment
+// Get profit by user segment (Admin)
 router.get('/profit/user-segments', auth, authorize('admin'), async (req, res) => {
   try {
     const { days = 30 } = req.query;
@@ -438,7 +442,169 @@ router.get('/profit/user-segments', auth, authorize('admin'), async (req, res) =
   }
 });
 
-// Export profit data as CSV
+// ====== USER EARNINGS ROUTES (NEW) ======
+
+// Get user's own earnings summary
+router.get('/earnings/my-summary', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { period = 'week' } = req.query;
+    
+    const endDate = new Date();
+    endDate.setHours(23, 59, 59, 999);
+    
+    let startDate = new Date();
+    
+    switch(period) {
+      case 'today':
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'week':
+        startDate.setDate(startDate.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'month':
+        startDate.setMonth(startDate.getMonth() - 1);
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      default:
+        startDate.setDate(startDate.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
+    }
+    
+    const summary = await getUserEarningsSummary(userId, startDate, endDate);
+    
+    // Get user's current balance
+    const user = await User.findById(userId);
+    
+    res.json({
+      success: true,
+      period,
+      currentBalance: user.walletBalance,
+      earnings: summary,
+      role: user.role
+    });
+  } catch (error) {
+    errorLogger(error, 'User Earnings Summary');
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to get earnings summary', 
+      error: error.message 
+    });
+  }
+});
+
+// Get user's daily earnings
+router.get('/earnings/my-daily', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { days = 30 } = req.query;
+    
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(days));
+    startDate.setHours(0, 0, 0, 0);
+    
+    const dailyEarnings = await UserDailyEarnings.find({
+      userId,
+      date: { $gte: startDate }
+    }).sort({ date: -1 });
+    
+    // Calculate totals
+    const totals = dailyEarnings.reduce((acc, day) => ({
+      orders: acc.orders + day.totalOrders,
+      revenue: acc.revenue + day.totalRevenue,
+      profit: acc.profit + day.totalProfit,
+      commission: acc.commission + day.commission
+    }), { orders: 0, revenue: 0, profit: 0, commission: 0 });
+    
+    res.json({
+      success: true,
+      period: `Last ${days} days`,
+      dailyEarnings,
+      totals
+    });
+  } catch (error) {
+    errorLogger(error, 'User Daily Earnings');
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to get daily earnings', 
+      error: error.message 
+    });
+  }
+});
+
+// Get agent commission report (Agents only)
+router.get('/earnings/commission', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    
+    // Check if user is an agent
+    if (user.role !== 'agent') {
+      return res.status(403).json({
+        success: false,
+        message: 'Commission data is only available for agents'
+      });
+    }
+    
+    const { startDate, endDate } = req.query;
+    
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+    
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    
+    const commissionData = await UserDailyEarnings.aggregate([
+      {
+        $match: {
+          userId: mongoose.Types.ObjectId(userId),
+          date: { $gte: start, $lte: end }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalCommission: { $sum: '$commission' },
+          totalOrders: { $sum: '$totalOrders' },
+          totalRevenue: { $sum: '$totalRevenue' },
+          avgCommissionPerDay: { $avg: '$commission' },
+          daysWorked: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Get commission transactions
+    const commissionTransactions = await Transaction.find({
+      userId,
+      type: 'commission',
+      createdAt: { $gte: start, $lte: end }
+    }).sort({ createdAt: -1 }).limit(50);
+    
+    res.json({
+      success: true,
+      period: { start, end },
+      summary: commissionData[0] || {
+        totalCommission: 0,
+        totalOrders: 0,
+        totalRevenue: 0,
+        avgCommissionPerDay: 0,
+        daysWorked: 0
+      },
+      commissionRate: 5, // 5% commission rate
+      recentTransactions: commissionTransactions
+    });
+  } catch (error) {
+    errorLogger(error, 'Agent Commission Report');
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to get commission report', 
+      error: error.message 
+    });
+  }
+});
+
+// Export profit data as CSV (Admin)
 router.get('/profit/export', auth, authorize('admin'), async (req, res) => {
   try {
     const { startDate, endDate, network } = req.query;
@@ -471,6 +637,48 @@ router.get('/profit/export', auth, authorize('admin'), async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Failed to export data', 
+      error: error.message 
+    });
+  }
+});
+
+// Export user earnings as CSV
+router.get('/earnings/export', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { startDate, endDate } = req.query;
+    
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+    
+    const earnings = await UserDailyEarnings.find({
+      userId,
+      date: { $gte: start, $lte: end }
+    }).sort({ date: -1 });
+    
+    // Convert to CSV format
+    const user = await User.findById(userId);
+    const isAgent = user.role === 'agent';
+    
+    let csvHeader = 'Date,Orders,Revenue,Profit';
+    if (isAgent) csvHeader += ',Commission';
+    csvHeader += '\n';
+    
+    const csvData = earnings.map(day => {
+      let row = `${day.date.toISOString().split('T')[0]},${day.totalOrders},${day.totalRevenue},${day.totalProfit}`;
+      if (isAgent) row += `,${day.commission}`;
+      return row;
+    }).join('\n');
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=earnings-${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csvHeader + csvData);
+    
+  } catch (error) {
+    errorLogger(error, 'Export User Earnings');
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to export earnings', 
       error: error.message 
     });
   }
