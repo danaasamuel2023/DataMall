@@ -1,4 +1,4 @@
-// pages/admin/withdraw/index.js
+// pages/admin/withdraw/index.js - UPDATED WITH FIXES
 'use client'
 
 import { useState, useEffect } from 'react';
@@ -14,7 +14,13 @@ import {
   ArrowLeft,
   Clock,
   TrendingUp,
-  Download
+  Download,
+  Building,
+  CreditCard,
+  Info,
+  XCircle,
+  Eye,
+  Bug
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -27,7 +33,17 @@ export default function WeeklyWithdraw() {
   const [withdrawals, setWithdrawals] = useState([]);
   const [statistics, setStatistics] = useState(null);
   const [selectedWeek, setSelectedWeek] = useState(null);
-  const [bankDetails, setBankDetails] = useState('');
+  const [debugInfo, setDebugInfo] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
+  
+  // Bank form states
+  const [banks, setBanks] = useState([]);
+  const [selectedBank, setSelectedBank] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verified, setVerified] = useState(false);
+  
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -41,6 +57,7 @@ export default function WeeklyWithdraw() {
       router.push('/Auth');
     } else {
       fetchData();
+      fetchBanks();
     }
   }, []);
 
@@ -58,8 +75,11 @@ export default function WeeklyWithdraw() {
         axios.get('http://localhost:5000/api/admin-withdrawal/statistics', { headers })
       ]);
       
+      console.log('Weekly Profits Response:', weeklyRes.data);
+      
       setWeeklyProfits(weeklyRes.data.weeklyProfits);
       setTotals(weeklyRes.data.totals);
+      setDebugInfo(weeklyRes.data.debugInfo);
       setCurrentWeek(currentRes.data.currentWeek);
       setWithdrawals(historyRes.data.withdrawals);
       setStatistics(statsRes.data.statistics);
@@ -71,9 +91,81 @@ export default function WeeklyWithdraw() {
     }
   };
 
+  const fetchBanks = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(
+        'http://localhost:5000/api/admin-withdrawal/banks',
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (response.data.success) {
+        setBanks(response.data.banks);
+      }
+    } catch (error) {
+      console.error('Error fetching banks:', error);
+    }
+  };
+
+  const fetchDebugData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(
+        'http://localhost:5000/api/admin-withdrawal/debug-weeks',
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (response.data.success) {
+        console.log('Debug Data:', response.data);
+        alert(JSON.stringify(response.data, null, 2));
+      }
+    } catch (error) {
+      console.error('Error fetching debug data:', error);
+    }
+  };
+
+  const verifyAccount = async () => {
+    if (!accountNumber || !selectedBank) {
+      setError('Please enter account number and select a bank');
+      return;
+    }
+
+    setVerifying(true);
+    setError('');
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        'http://localhost:5000/api/admin-withdrawal/verify-account',
+        {
+          accountNumber,
+          bankCode: selectedBank
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (response.data.success) {
+        setAccountName(response.data.accountDetails.accountName);
+        setVerified(true);
+        setSuccess('Account verified successfully!');
+        setTimeout(() => setSuccess(''), 3000);
+      }
+    } catch (error) {
+      setError(error.response?.data?.message || 'Failed to verify account');
+      setVerified(false);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const handleWithdrawWeek = async () => {
-    if (!selectedWeek || !bankDetails) {
-      setError('Please select a week and enter bank details');
+    if (!selectedWeek || !accountNumber || !selectedBank || !accountName) {
+      setError('Please complete account verification first');
+      return;
+    }
+
+    if (!verified) {
+      setError('Please verify the account first');
       return;
     }
 
@@ -83,45 +175,74 @@ export default function WeeklyWithdraw() {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        'https://datamall.onrender.com/api/admin-withdrawal/withdraw-week',
+        'http://localhost:5000/api/admin-withdrawal/withdraw-week',
         {
           weeklyProfitId: selectedWeek._id,
-          bankDetails,
+          accountNumber,
+          bankCode: selectedBank,
+          accountName,
           notes
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      setSuccess('Weekly withdrawal created successfully!');
-      setSelectedWeek(null);
-      setBankDetails('');
-      setNotes('');
-      await fetchData();
-      
-      setTimeout(() => setSuccess(''), 5000);
+      if (response.data.success) {
+        setSuccess('Withdrawal initiated successfully! Transfer is being processed.');
+        
+        // Reset form
+        setSelectedWeek(null);
+        setAccountNumber('');
+        setSelectedBank('');
+        setAccountName('');
+        setVerified(false);
+        setNotes('');
+        
+        // Refresh data
+        await fetchData();
+        
+        setTimeout(() => setSuccess(''), 7000);
+      }
     } catch (error) {
-      setError(error.response?.data?.message || 'Failed to create withdrawal');
+      setError(error.response?.data?.message || 'Failed to process withdrawal');
     } finally {
       setProcessing(false);
     }
   };
 
-  const markCompleted = async (id) => {
-    if (!confirm('Mark this withdrawal as completed?')) return;
+  const checkTransferStatus = async (withdrawalId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(
+        `http://localhost:5000/api/admin-withdrawal/transfer-status/${withdrawalId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (response.data.success) {
+        setSuccess(`Transfer status: ${response.data.withdrawal.status}`);
+        await fetchData();
+      }
+    } catch (error) {
+      setError('Failed to check transfer status');
+    }
+  };
+
+  const retryTransfer = async (withdrawalId) => {
+    if (!confirm('Retry this transfer?')) return;
     
     try {
       const token = localStorage.getItem('token');
-      await axios.put(
-        `https://datamall.onrender.com/api/admin-withdrawal/complete/${id}`,
+      const response = await axios.post(
+        `http://localhost:5000/api/admin-withdrawal/retry/${withdrawalId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      setSuccess('Withdrawal marked as completed');
-      await fetchData();
-      setTimeout(() => setSuccess(''), 3000);
+      if (response.data.success) {
+        setSuccess('Transfer retry initiated');
+        await fetchData();
+      }
     } catch (error) {
-      setError('Failed to complete withdrawal');
+      setError(error.response?.data?.message || 'Failed to retry transfer');
     }
   };
 
@@ -135,6 +256,24 @@ export default function WeeklyWithdraw() {
 
   const formatWeek = (startDate, endDate) => {
     return `${formatDate(startDate)} - ${formatDate(endDate)}`;
+  };
+
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'processing': return 'bg-blue-100 text-blue-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'failed': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getWeekStatus = (week) => {
+    if (week.isWithdrawn) return { text: 'Withdrawn', color: 'bg-gray-100 text-gray-800' };
+    if (week.isCurrentWeek) return { text: 'In Progress', color: 'bg-blue-100 text-blue-800' };
+    if (!week.isComplete) return { text: 'Incomplete', color: 'bg-yellow-100 text-yellow-800' };
+    if (week.totalProfit < 10) return { text: 'Below Minimum', color: 'bg-orange-100 text-orange-800' };
+    return { text: 'Available', color: 'bg-green-100 text-green-800' };
   };
 
   if (isLoading) {
@@ -151,7 +290,7 @@ export default function WeeklyWithdraw() {
   return (
     <>
       <Head>
-        <title>Weekly Profit Withdrawal</title>
+        <title>Weekly Profit Withdrawal - Paystack</title>
       </Head>
 
       <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -164,11 +303,19 @@ export default function WeeklyWithdraw() {
                 Weekly Profit Withdrawal
               </h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                Withdraw your profits week by week
+                Automated bank transfers via Paystack
               </p>
             </div>
             
             <div className="flex gap-3">
+              <button
+                onClick={() => setShowDebug(!showDebug)}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-yellow-200 dark:bg-yellow-700 rounded-lg hover:bg-yellow-300 dark:hover:bg-yellow-600 flex items-center gap-2"
+              >
+                <Bug className="h-4 w-4" />
+                Debug
+              </button>
+              
               <Link
                 href="/admin/profit"
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center gap-2"
@@ -186,6 +333,46 @@ export default function WeeklyWithdraw() {
               </button>
             </div>
           </div>
+
+          {/* Debug Section */}
+          {showDebug && debugInfo && (
+            <div className="mb-6 bg-yellow-50 dark:bg-yellow-900 border-2 border-yellow-400 p-4 rounded-lg">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-bold text-gray-900 dark:text-white flex items-center">
+                  <Bug className="h-5 w-5 mr-2" />
+                  Debug Information
+                </h3>
+                <button
+                  onClick={fetchDebugData}
+                  className="text-sm px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                >
+                  Get Full Debug Data
+                </button>
+              </div>
+              <div className="space-y-1 text-sm">
+                <p><strong>Current Date:</strong> {debugInfo.currentDate}</p>
+                <p><strong>Total Weeks:</strong> {debugInfo.totalWeeks}</p>
+                <p><strong>Withdrawable Weeks:</strong> {debugInfo.withdrawableWeeks}</p>
+                <p><strong>Total Available:</strong> GHS {totals?.availableProfit?.toFixed(2)}</p>
+                <div className="mt-3 border-t pt-3">
+                  <p className="font-semibold mb-2">First 3 Weeks Status:</p>
+                  {weeklyProfits.slice(0, 3).map(week => (
+                    <div key={week._id} className="ml-4 mb-2 p-2 bg-white dark:bg-gray-800 rounded">
+                      <p className="font-medium">Week {week.weekNumber}:</p>
+                      <ul className="ml-4 text-xs">
+                        <li>Profit: GHS {week.totalProfit}</li>
+                        <li>Withdrawn: {week.isWithdrawn ? 'Yes' : 'No'}</li>
+                        <li>Current: {week.isCurrentWeek ? 'Yes' : 'No'}</li>
+                        <li>Complete: {week.isComplete ? 'Yes' : 'No'}</li>
+                        <li>Can Withdraw: {week.canWithdraw ? 'Yes' : 'No'}</li>
+                        <li>End Date: {new Date(week.weekEndDate).toLocaleDateString()}</li>
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Alerts */}
           {error && (
@@ -220,6 +407,9 @@ export default function WeeklyWithdraw() {
               <p className="text-2xl font-bold text-green-600 mt-1">
                 GHS {totals?.availableProfit?.toFixed(2) || '0.00'}
               </p>
+              {debugInfo && (
+                <span className="text-xs text-gray-500">{debugInfo.withdrawableWeeks} weeks</span>
+              )}
             </div>
             
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
@@ -230,21 +420,24 @@ export default function WeeklyWithdraw() {
             </div>
             
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-              <p className="text-gray-600 dark:text-gray-400 text-sm">This Week's Profit</p>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">Processing</p>
               <p className="text-2xl font-bold text-blue-600 mt-1">
-                GHS {currentWeek?.totalProfit?.toFixed(2) || '0.00'}
+                {statistics?.processing || 0}
               </p>
-              {currentWeek?.isWithdrawn && (
-                <span className="text-xs text-gray-500">Already withdrawn</span>
-              )}
+              <span className="text-xs text-gray-500">Active transfers</span>
             </div>
           </div>
 
           {/* Weekly Profits Table */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Weekly Profits Available
-            </h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Weekly Profits Overview
+              </h2>
+              <div className="text-sm text-gray-500">
+                Showing {weeklyProfits.length} weeks
+              </div>
+            </div>
             
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -274,58 +467,73 @@ export default function WeeklyWithdraw() {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {weeklyProfits.map((week) => (
-                    <tr key={week._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        Week {week.weekNumber}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {formatWeek(week.weekStartDate, week.weekEndDate)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {week.totalOrders}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        GHS {week.totalRevenue.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                        GHS {week.totalProfit.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          week.isWithdrawn 
-                            ? 'bg-gray-100 text-gray-800'
-                            : 'bg-green-100 text-green-800'
-                        }`}>
-                          {week.isWithdrawn ? 'Withdrawn' : 'Available'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {!week.isWithdrawn && week.totalProfit > 0 && (
-                          <button
-                            onClick={() => setSelectedWeek(week)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            Withdraw
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {weeklyProfits.map((week) => {
+                    const status = getWeekStatus(week);
+                    return (
+                      <tr key={week._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          Week {week.weekNumber}
+                          {week.isCurrentWeek && (
+                            <span className="ml-2 text-xs text-blue-600">(Current)</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {formatWeek(week.weekStartDate, week.weekEndDate)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {week.totalOrders}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          GHS {week.totalRevenue.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                          GHS {week.totalProfit.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${status.color}`}>
+                            {status.text}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {week.canWithdraw ? (
+                            <button
+                              onClick={() => setSelectedWeek(week)}
+                              className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1"
+                            >
+                              <DollarSign className="h-4 w-4" />
+                              Withdraw
+                            </button>
+                          ) : (
+                            <div className="text-gray-400 text-xs">
+                              {week.isWithdrawn && (
+                                <span className="flex items-center gap-1">
+                                  <CheckCircle className="h-3 w-3" />
+                                  Done
+                                </span>
+                              )}
+                              {week.isCurrentWeek && "In Progress"}
+                              {!week.isComplete && !week.isCurrentWeek && "Not Complete"}
+                              {week.isComplete && !week.isWithdrawn && week.totalProfit < 10 && "Min: GHS 10"}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Withdrawal Form Modal */}
+          {/* Withdrawal Form Modal with Paystack */}
           {selectedWeek && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-                  Withdraw Weekly Profit
+                  Withdraw Weekly Profit via Paystack
                 </h3>
                 
-                <div className="mb-4">
+                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
                   <p className="text-sm text-gray-600 dark:text-gray-400">
                     Week {selectedWeek.weekNumber} ({formatWeek(selectedWeek.weekStartDate, selectedWeek.weekEndDate)})
                   </p>
@@ -334,21 +542,76 @@ export default function WeeklyWithdraw() {
                   </p>
                 </div>
                 
+                {/* Bank Selection */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Bank Details
+                    <Building className="inline h-4 w-4 mr-1" />
+                    Select Bank
                   </label>
-                  <input
-                    type="text"
-                    value={bankDetails}
-                    onChange={(e) => setBankDetails(e.target.value)}
+                  <select
+                    value={selectedBank}
+                    onChange={(e) => {
+                      setSelectedBank(e.target.value);
+                      setVerified(false);
+                      setAccountName('');
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                    placeholder="e.g., GTBank - 0123456789"
-                  />
+                  >
+                    <option value="">-- Select Bank --</option>
+                    {banks.map((bank) => (
+                      <option key={bank.code} value={bank.code}>
+                        {bank.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 
+                {/* Account Number */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <CreditCard className="inline h-4 w-4 mr-1" />
+                    Account Number
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={accountNumber}
+                      onChange={(e) => {
+                        setAccountNumber(e.target.value);
+                        setVerified(false);
+                        setAccountName('');
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="0123456789"
+                    />
+                    <button
+                      onClick={verifyAccount}
+                      disabled={!accountNumber || !selectedBank || verifying}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {verifying ? 'Verifying...' : 'Verify'}
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Account Name (After Verification) */}
+                {accountName && (
+                  <div className="mb-4 p-3 bg-green-50 dark:bg-green-900 rounded-lg">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Account Name</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">{accountName}</p>
+                    {verified && (
+                      <p className="text-xs text-green-600 mt-1 flex items-center">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Account verified successfully
+                      </p>
+                    )}
+                  </div>
+                )}
+                
+                {/* Notes */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <Info className="inline h-4 w-4 mr-1" />
                     Notes (Optional)
                   </label>
                   <textarea
@@ -356,14 +619,27 @@ export default function WeeklyWithdraw() {
                     onChange={(e) => setNotes(e.target.value)}
                     rows="2"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Any additional notes..."
                   />
                 </div>
                 
+                {/* Info Box */}
+                <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900 rounded-lg">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <Info className="inline h-3 w-3 mr-1" />
+                    Transfer will be processed immediately via Paystack. Funds typically arrive within minutes.
+                  </p>
+                </div>
+                
+                {/* Actions */}
                 <div className="flex justify-end space-x-3">
                   <button
                     onClick={() => {
                       setSelectedWeek(null);
-                      setBankDetails('');
+                      setAccountNumber('');
+                      setSelectedBank('');
+                      setAccountName('');
+                      setVerified(false);
                       setNotes('');
                     }}
                     className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300"
@@ -372,17 +648,27 @@ export default function WeeklyWithdraw() {
                   </button>
                   <button
                     onClick={handleWithdrawWeek}
-                    disabled={processing || !bankDetails}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400"
+                    disabled={processing || !verified || !accountName}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
                   >
-                    {processing ? 'Processing...' : 'Confirm Withdrawal'}
+                    {processing ? (
+                      <>
+                        <RefreshCw className="animate-spin h-4 w-4 mr-2" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <DollarSign className="h-4 w-4 mr-2" />
+                        Confirm Transfer
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Recent Withdrawals */}
+          {/* Recent Withdrawals with Enhanced Status */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
               Recent Withdrawals
@@ -402,7 +688,7 @@ export default function WeeklyWithdraw() {
                       Amount
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                      Bank
+                      Account
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
                       Status
@@ -427,25 +713,40 @@ export default function WeeklyWithdraw() {
                         GHS {withdrawal.amount.toFixed(2)}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                        {withdrawal.bankDetails}
+                        <div>
+                          <p className="font-medium">{withdrawal.bankInfo?.accountName || '-'}</p>
+                          <p className="text-xs">{withdrawal.bankInfo?.accountNumber || '-'}</p>
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          withdrawal.status === 'completed' 
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(withdrawal.status)}`}>
                           {withdrawal.status}
                         </span>
+                        {withdrawal.paymentStatus && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {withdrawal.paymentStatus}
+                          </p>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {withdrawal.status === 'pending' && (
+                        {withdrawal.status === 'processing' && (
                           <button
-                            onClick={() => markCompleted(withdrawal._id)}
-                            className="text-green-600 hover:text-green-900"
+                            onClick={() => checkTransferStatus(withdrawal._id)}
+                            className="text-blue-600 hover:text-blue-900 mr-2"
                           >
-                            Complete
+                            Check Status
                           </button>
+                        )}
+                        {withdrawal.status === 'failed' && (
+                          <button
+                            onClick={() => retryTransfer(withdrawal._id)}
+                            className="text-orange-600 hover:text-orange-900"
+                          >
+                            Retry
+                          </button>
+                        )}
+                        {withdrawal.status === 'completed' && (
+                          <CheckCircle className="h-5 w-5 text-green-500" />
                         )}
                       </td>
                     </tr>
