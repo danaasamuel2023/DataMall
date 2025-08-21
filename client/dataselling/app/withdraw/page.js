@@ -69,10 +69,10 @@ export default function WeeklyWithdraw() {
       const headers = { Authorization: `Bearer ${token}` };
       
       const [weeklyRes, currentRes, historyRes, statsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/admin-withdrawal/weekly-profits', { headers }),
-        axios.get('http://localhost:5000/api/admin-withdrawal/current-week', { headers }),
-        axios.get('http://localhost:5000/api/admin-withdrawal/history', { headers }),
-        axios.get('http://localhost:5000/api/admin-withdrawal/statistics', { headers })
+        axios.get('https://datamall.onrender.com/api/admin-withdrawal/weekly-profits', { headers }),
+        axios.get('https://datamall.onrender.com/api/admin-withdrawal/current-week', { headers }),
+        axios.get('https://datamall.onrender.com/api/admin-withdrawal/history', { headers }),
+        axios.get('https://datamall.onrender.com/api/admin-withdrawal/statistics', { headers })
       ]);
       
       console.log('Weekly Profits Response:', weeklyRes.data);
@@ -95,7 +95,7 @@ export default function WeeklyWithdraw() {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get(
-        'http://localhost:5000/api/admin-withdrawal/banks',
+        'https://datamall.onrender.com/api/admin-withdrawal/banks',
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
@@ -111,7 +111,7 @@ export default function WeeklyWithdraw() {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get(
-        'http://localhost:5000/api/admin-withdrawal/debug-weeks',
+        'https://datamall.onrender.com/api/admin-withdrawal/debug-weeks',
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
@@ -136,7 +136,7 @@ export default function WeeklyWithdraw() {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        'http://localhost:5000/api/admin-withdrawal/verify-account',
+        'https://datamall.onrender.com/api/admin-withdrawal/verify-account',
         {
           accountNumber,
           bankCode: selectedBank
@@ -175,7 +175,7 @@ export default function WeeklyWithdraw() {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        'http://localhost:5000/api/admin-withdrawal/withdraw-week',
+        'https://datamall.onrender.com/api/admin-withdrawal/withdraw-week',
         {
           weeklyProfitId: selectedWeek._id,
           accountNumber,
@@ -213,7 +213,7 @@ export default function WeeklyWithdraw() {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get(
-        `http://localhost:5000/api/admin-withdrawal/transfer-status/${withdrawalId}`,
+        `https://datamall.onrender.com/api/admin-withdrawal/transfer-status/${withdrawalId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
@@ -232,7 +232,7 @@ export default function WeeklyWithdraw() {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        `http://localhost:5000/api/admin-withdrawal/retry/${withdrawalId}`,
+        `https://datamall.onrender.com/api/admin-withdrawal/retry/${withdrawalId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
