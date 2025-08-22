@@ -20,7 +20,7 @@ dotenv.config();
 const router = express.Router();
 
 // DataMart API Configuration
-const DATAMART_BASE_URL = 'https://datamartbackened.onrender.com';
+const DATAMART_BASE_URL = 'https://api.datamartgh.shop';
 const DATAMART_API_KEY = process.env.DATAMART_API_KEY || 'f9329bb51dd27c41fe3b85c7eb916a8e88821e07fd0565e1ff2558e7be3be7b4';
 
 // Create DataMart client
