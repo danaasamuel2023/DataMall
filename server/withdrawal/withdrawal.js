@@ -1,4 +1,4 @@
-// routes/adminWithdrawal.js - COMPLETE PAYSTACK INTEGRATION WITH FIXES
+// routes/adminWithdrawal.js - FIXED VERSION WITH DUPLICATE PROTECTION
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
@@ -66,9 +66,18 @@ router.get('/banks', auth, authorize('admin'), async (req, res) => {
         longcode: bank.longcode
       }));
       
+      // Remove duplicates based on bank code
+      const uniqueBanks = banks.reduce((acc, bank) => {
+        const exists = acc.find(b => b.code === bank.code);
+        if (!exists) {
+          acc.push(bank);
+        }
+        return acc;
+      }, []);
+      
       res.json({
         success: true,
-        banks
+        banks: uniqueBanks
       });
     } else {
       throw new Error('Failed to fetch banks');
@@ -165,7 +174,7 @@ router.get('/weekly-profits', auth, authorize('admin'), async (req, res) => {
     const totals = weeklyProfits.reduce((acc, week) => ({
       totalProfit: acc.totalProfit + week.totalProfit,
       withdrawnProfit: acc.withdrawnProfit + (week.isWithdrawn ? week.totalProfit : 0),
-      availableProfit: acc.availableProfit + (!week.isWithdrawn && isWeekComplete(week.weekEndDate) ? week.totalProfit : 0),
+      availableProfit: acc.availableProfit + (!week.isWithdrawn && isWeekComplete(week.weekEndDate) && week.totalProfit >= 10 ? week.totalProfit : 0),
       totalOrders: acc.totalOrders + week.totalOrders
     }), { totalProfit: 0, withdrawnProfit: 0, availableProfit: 0, totalOrders: 0 });
     
@@ -258,27 +267,47 @@ router.post('/withdraw-week', auth, authorize('admin'), async (req, res) => {
       });
     }
     
-    // Find the weekly profit record
-    const weeklyProfit = await WeeklyProfit.findById(weeklyProfitId).session(session);
+    // ATOMIC OPERATION: Find and update the weekly profit record
+    // This prevents race conditions by atomically checking and updating
+    const weeklyProfit = await WeeklyProfit.findOneAndUpdate(
+      { 
+        _id: weeklyProfitId,
+        isWithdrawn: false  // Only proceed if not already withdrawn
+      },
+      { 
+        $set: { 
+          isWithdrawn: true,  // Immediately mark as withdrawn
+          withdrawnAt: new Date()
+        }
+      },
+      { 
+        new: false,  // Return the document BEFORE the update
+        session 
+      }
+    );
     
     if (!weeklyProfit) {
       await session.abortTransaction();
-      return res.status(404).json({
-        success: false,
-        message: 'Weekly profit record not found'
-      });
-    }
-    
-    // Validation checks
-    if (weeklyProfit.isWithdrawn) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: 'This week\'s profit has already been withdrawn'
+        message: 'This week has already been withdrawn or does not exist'
       });
     }
     
+    // Additional validation checks
     if (weeklyProfit.totalProfit < 10) {  // Minimum GHS 10
+      // Rollback the withdrawal flag
+      await WeeklyProfit.findByIdAndUpdate(
+        weeklyProfitId,
+        { 
+          $set: { 
+            isWithdrawn: false,
+            withdrawnAt: null
+          }
+        },
+        { session }
+      );
+      
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
@@ -288,6 +317,18 @@ router.post('/withdraw-week', auth, authorize('admin'), async (req, res) => {
     
     // Check if the week is complete
     if (!isWeekComplete(weeklyProfit.weekEndDate)) {
+      // Rollback the withdrawal flag
+      await WeeklyProfit.findByIdAndUpdate(
+        weeklyProfitId,
+        { 
+          $set: { 
+            isWithdrawn: false,
+            withdrawnAt: null
+          }
+        },
+        { session }
+      );
+      
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
@@ -320,6 +361,19 @@ router.post('/withdraw-week', auth, authorize('admin'), async (req, res) => {
       
     } catch (error) {
       console.error('Error creating recipient:', error.response?.data || error.message);
+      
+      // Rollback the withdrawal flag
+      await WeeklyProfit.findByIdAndUpdate(
+        weeklyProfitId,
+        { 
+          $set: { 
+            isWithdrawn: false,
+            withdrawnAt: null
+          }
+        },
+        { session }
+      );
+      
       await session.abortTransaction();
       return res.status(500).json({
         success: false,
@@ -349,6 +403,17 @@ router.post('/withdraw-week', auth, authorize('admin'), async (req, res) => {
     });
     
     await withdrawal.save({ session });
+    
+    // Update weekly profit with withdrawal ID
+    await WeeklyProfit.findByIdAndUpdate(
+      weeklyProfitId,
+      { 
+        $set: { 
+          withdrawalId: withdrawal._id
+        }
+      },
+      { session }
+    );
     
     // STEP 3: Initiate transfer
     console.log('Initiating Paystack transfer...');
@@ -381,12 +446,6 @@ router.post('/withdraw-week', auth, authorize('admin'), async (req, res) => {
         
         await withdrawal.save({ session });
         
-        // Mark weekly profit as withdrawn
-        weeklyProfit.isWithdrawn = true;
-        weeklyProfit.withdrawalId = withdrawal._id;
-        weeklyProfit.withdrawnAt = new Date();
-        await weeklyProfit.save({ session });
-        
         // Commit transaction
         await session.commitTransaction();
         
@@ -417,6 +476,19 @@ router.post('/withdraw-week', auth, authorize('admin'), async (req, res) => {
       withdrawal.failureReason = error.response?.data?.message || error.message;
       withdrawal.paymentResponse = JSON.stringify(error.response?.data || {});
       await withdrawal.save({ session });
+      
+      // Rollback the withdrawal flag
+      await WeeklyProfit.findByIdAndUpdate(
+        weeklyProfitId,
+        { 
+          $set: { 
+            isWithdrawn: false,
+            withdrawnAt: null,
+            withdrawalId: null
+          }
+        },
+        { session }
+      );
       
       await session.abortTransaction();
       
@@ -689,10 +761,14 @@ router.post('/webhook', async (req, res) => {
 // Retry failed withdrawal
 // =====================================================
 router.post('/retry/:id', auth, authorize('admin'), async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
-    const withdrawal = await AdminWithdrawal.findById(req.params.id);
+    const withdrawal = await AdminWithdrawal.findById(req.params.id).session(session);
     
     if (!withdrawal) {
+      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: 'Withdrawal not found'
@@ -700,6 +776,7 @@ router.post('/retry/:id', auth, authorize('admin'), async (req, res) => {
     }
     
     if (withdrawal.status === 'completed') {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Withdrawal already completed'
@@ -711,11 +788,39 @@ router.post('/retry/:id', auth, authorize('admin'), async (req, res) => {
     try {
       bankInfo = JSON.parse(withdrawal.bankDetails);
     } catch (e) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Invalid bank details format'
       });
     }
+    
+    // Check and update weekly profit status
+    const weeklyProfit = await WeeklyProfit.findOneAndUpdate(
+      {
+        _id: withdrawal.weeklyProfitId,
+        isWithdrawn: false
+      },
+      {
+        $set: {
+          isWithdrawn: true,
+          withdrawnAt: new Date(),
+          withdrawalId: withdrawal._id
+        }
+      },
+      { session, new: true }
+    );
+    
+    if (!weeklyProfit) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: 'Weekly profit is already withdrawn or not found'
+      });
+    }
+    
+    // Generate new reference for retry
+    const newReference = generateReference();
     
     // Retry the transfer
     const transferData = {
@@ -723,7 +828,7 @@ router.post('/retry/:id', auth, authorize('admin'), async (req, res) => {
       amount: Math.round(withdrawal.amount * 100),
       recipient: bankInfo.recipientCode,
       reason: withdrawal.notes,
-      reference: withdrawal.paymentReference
+      reference: newReference
     };
     
     try {
@@ -732,6 +837,7 @@ router.post('/retry/:id', auth, authorize('admin'), async (req, res) => {
       if (transferResponse.data.status) {
         const transferInfo = transferResponse.data.data;
         
+        withdrawal.paymentReference = newReference;
         withdrawal.paymentId = transferInfo.transfer_code;
         withdrawal.paymentStatus = transferInfo.status;
         withdrawal.paymentResponse = JSON.stringify(transferInfo);
@@ -741,7 +847,8 @@ router.post('/retry/:id', auth, authorize('admin'), async (req, res) => {
           withdrawal.completedAt = new Date();
         }
         
-        await withdrawal.save();
+        await withdrawal.save({ session });
+        await session.commitTransaction();
         
         res.json({
           success: true,
@@ -754,7 +861,22 @@ router.post('/retry/:id', auth, authorize('admin'), async (req, res) => {
     } catch (error) {
       withdrawal.status = 'failed';
       withdrawal.failureReason = error.response?.data?.message || error.message;
-      await withdrawal.save();
+      await withdrawal.save({ session });
+      
+      // Rollback weekly profit status
+      await WeeklyProfit.findByIdAndUpdate(
+        withdrawal.weeklyProfitId,
+        {
+          $set: {
+            isWithdrawn: false,
+            withdrawnAt: null,
+            withdrawalId: null
+          }
+        },
+        { session }
+      );
+      
+      await session.abortTransaction();
       
       res.status(500).json({
         success: false,
@@ -763,12 +885,15 @@ router.post('/retry/:id', auth, authorize('admin'), async (req, res) => {
       });
     }
   } catch (error) {
+    await session.abortTransaction();
     console.error('Error retrying withdrawal:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retry withdrawal',
       error: error.message
     });
+  } finally {
+    session.endSession();
   }
 });
 

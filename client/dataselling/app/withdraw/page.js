@@ -1,4 +1,4 @@
-// pages/admin/withdraw/index.js - UPDATED WITH FIXES
+// pages/admin/withdraw/index.js - FIXED VERSION
 'use client'
 
 import { useState, useEffect } from 'react';
@@ -100,7 +100,15 @@ export default function WeeklyWithdraw() {
       );
       
       if (response.data.success) {
-        setBanks(response.data.banks);
+        // Remove duplicates based on bank code
+        const uniqueBanks = response.data.banks.reduce((acc, bank) => {
+          if (!acc.find(b => b.code === bank.code)) {
+            acc.push(bank);
+          }
+          return acc;
+        }, []);
+        
+        setBanks(uniqueBanks);
       }
     } catch (error) {
       console.error('Error fetching banks:', error);
@@ -166,6 +174,11 @@ export default function WeeklyWithdraw() {
 
     if (!verified) {
       setError('Please verify the account first');
+      return;
+    }
+
+    // Prevent double-clicking
+    if (processing) {
       return;
     }
 
@@ -498,7 +511,8 @@ export default function WeeklyWithdraw() {
                           {week.canWithdraw ? (
                             <button
                               onClick={() => setSelectedWeek(week)}
-                              className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1"
+                              disabled={processing}
+                              className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1 disabled:bg-gray-400 disabled:cursor-not-allowed"
                             >
                               <DollarSign className="h-4 w-4" />
                               Withdraw
@@ -558,8 +572,8 @@ export default function WeeklyWithdraw() {
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                   >
                     <option value="">-- Select Bank --</option>
-                    {banks.map((bank) => (
-                      <option key={bank.code} value={bank.code}>
+                    {banks.map((bank, index) => (
+                      <option key={`${bank.code}_${index}`} value={bank.code}>
                         {bank.name}
                       </option>
                     ))}
@@ -642,7 +656,8 @@ export default function WeeklyWithdraw() {
                       setVerified(false);
                       setNotes('');
                     }}
-                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300"
+                    disabled={processing}
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50"
                   >
                     Cancel
                   </button>
