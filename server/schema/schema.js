@@ -237,7 +237,7 @@ const WeeklyProfitSchema = new mongoose.Schema({
   }
 });
 
-// ============ ADMIN WITHDRAWAL SCHEMA ============
+// ============ ADMIN WITHDRAWAL SCHEMA - UPDATED FOR PAYSTACK ============
 const AdminWithdrawalSchema = new mongoose.Schema({
   amount: { 
     type: Number, 
@@ -261,14 +261,43 @@ const AdminWithdrawalSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
+  // Updated status enum to include all necessary states
   status: { 
     type: String, 
-    enum: ['pending', 'completed', 'cancelled'], 
+    enum: ['pending', 'processing', 'completed', 'failed', 'cancelled'], 
     default: 'pending' 
   },
   notes: { 
     type: String 
   },
+  
+  // Paystack-specific fields
+  paymentReference: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['paystack', 'manual'],
+    default: 'paystack'
+  },
+  paymentId: {
+    type: String  // Paystack transfer code
+  },
+  paymentStatus: {
+    type: String  // Paystack transfer status
+  },
+  paymentResponse: {
+    type: String  // JSON string of Paystack response
+  },
+  
+  // Error handling
+  failureReason: {
+    type: String
+  },
+  
+  // Timestamps
   createdAt: { 
     type: Date, 
     default: Date.now 
@@ -284,7 +313,7 @@ const AdminWithdrawalSchema = new mongoose.Schema({
   }
 });
 
-// ============ USER DAILY EARNINGS SCHEMA (NEW) ============
+// ============ USER DAILY EARNINGS SCHEMA ============
 const UserDailyEarningsSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -327,6 +356,8 @@ ProfitAnalyticsSchema.index({ date: 1, network: 1 }, { unique: true });
 WeeklyProfitSchema.index({ weekStartDate: 1, weekEndDate: 1 }, { unique: true });
 WeeklyProfitSchema.index({ year: 1, weekNumber: 1 });
 UserDailyEarningsSchema.index({ userId: 1, date: 1 }, { unique: true });
+AdminWithdrawalSchema.index({ paymentReference: 1 });
+AdminWithdrawalSchema.index({ status: 1, createdAt: -1 });
 
 // ============ CREATE MODELS ============
 const User = mongoose.model('UserNASH', UserSchema);
@@ -727,4 +758,4 @@ module.exports = {
   getDailyProfitReport,
   getMonthlyProfitSummary,
   getBestPerformingPackages
-};``
+};
