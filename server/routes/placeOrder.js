@@ -1,6 +1,4 @@
-// routes/datamart-routes.js
-// COMPLETE DataMart routes with integrated profit tracking and WEEKLY PROFIT TRACKING
-
+// SECURE datamart-routes.js with PRICE VALIDATION
 const express = require('express');
 const axios = require('axios');
 const dotenv = require('dotenv');
@@ -10,7 +8,7 @@ const {
   Transaction, 
   ProviderPricing, 
   ProfitAnalytics,
-  WeeklyProfit  // ADDED THIS IMPORT
+  WeeklyProfit
 } = require('../schema/schema');
 const fs = require('fs');
 const path = require('path');
@@ -32,7 +30,68 @@ const datamartClient = axios.create({
   }
 });
 
-// PROFIT CONFIGURATION - Adjust these based on your actual costs
+// ===================================================
+// CRITICAL: FIXED PRICING - NEVER TRUST CLIENT PRICES
+// ===================================================
+const BUNDLE_PRICING = {
+  mtn: {
+    '1': 4.70,
+    '2': 9.40,
+    '3': 13.70,
+    '4': 18.70,
+    '5': 23.70,
+    '6': 27.20,
+    '8': 35.70,
+    '10': 43.70,
+    '15': 62.70,
+    '20': 83.20,
+    '25': 105.20,
+    '30': 129.20,
+    '40': 166.20,
+    '50': 207.20,
+    '100': 407.20
+  },
+  telecel: {
+    '1': 5.00,
+    '2': 10.00,
+    '3': 15.00,
+    '5': 25.00,
+    '10': 50.00,
+    '15': 75.00,
+    '20': 100.00,
+    '30': 150.00,
+    '50': 250.00
+  },
+  at: {
+    '1': 5.00,
+    '2': 10.00,
+    '3': 15.00,
+    '5': 25.00,
+    '10': 50.00,
+    '15': 75.00,
+    '20': 100.00,
+    '30': 150.00
+  },
+  tigo: {
+    '1': 5.00,
+    '2': 10.00,
+    '3': 15.00,
+    '5': 25.00,
+    '10': 50.00
+  },
+  airtel: {
+    '1': 5.00,
+    '2': 10.00,
+    '3': 15.00,
+    '5': 25.00,
+    '10': 50.00
+  },
+  'afa-registration': {
+    'default': 10.00  // Fixed price for AFA registration
+  }
+};
+
+// PROFIT CONFIGURATION (costs for calculating profit)
 const PROFIT_CONFIG = {
   mtn: {
     '1': { cost: 4.50, sell: 4.70 },
@@ -94,7 +153,7 @@ if (!fs.existsSync(logDirectory)) {
   fs.mkdirSync(logDirectory, { recursive: true });
 }
 
-// Logger function for DataMart API interactions
+// Logger function
 const logDatamartApiInteraction = (type, reference, data) => {
   const timestamp = new Date().toISOString();
   const logEntry = {
@@ -114,25 +173,48 @@ const logDatamartApiInteraction = (type, reference, data) => {
     }
   );
   
-  // Also log to console for immediate visibility
   console.log(`[DATAMART API ${type}] [${timestamp}] [Ref: ${reference}]`, JSON.stringify(data));
 };
 
-// Helper function to calculate profit for an order
+// ===================================================
+// CRITICAL SECURITY FUNCTION: Get correct price for bundle
+// ===================================================
+function getCorrectPrice(network, dataAmount) {
+  const networkLower = network.toLowerCase();
+  
+  // Handle network variations
+  let pricingNetwork = networkLower;
+  if (networkLower === 'tigo' || networkLower === 'airtel' || networkLower === 'airteltigo') {
+    pricingNetwork = 'at';
+  }
+  
+  // Get the network pricing
+  const networkPricing = BUNDLE_PRICING[pricingNetwork];
+  if (!networkPricing) {
+    throw new Error(`Invalid network: ${network}`);
+  }
+  
+  // Get the price for this data amount
+  const price = networkPricing[dataAmount.toString()];
+  if (price === undefined || price === null) {
+    throw new Error(`Invalid data package: ${dataAmount}GB for ${network}`);
+  }
+  
+  return price;
+}
+
+// Calculate profit for an order
 function calculateProfit(network, dataAmount, price) {
   const networkLower = network.toLowerCase();
   const capacityStr = dataAmount.toString();
   
-  // Handle network variations
   let configNetwork = networkLower;
   if (networkLower === 'tigo' || networkLower === 'airtel' || networkLower === 'airteltigo') {
     configNetwork = 'at';
   }
   
-  // Get pricing config for this network and capacity
   const networkConfig = PROFIT_CONFIG[configNetwork];
   if (!networkConfig) {
-    // Default 15% margin if network not configured
     return {
       providerCost: price * 0.85,
       profit: price * 0.15,
@@ -142,7 +224,6 @@ function calculateProfit(network, dataAmount, price) {
   
   const packageConfig = networkConfig[capacityStr];
   if (!packageConfig) {
-    // Default 15% margin if package not configured
     return {
       providerCost: price * 0.85,
       profit: price * 0.15,
@@ -150,7 +231,6 @@ function calculateProfit(network, dataAmount, price) {
     };
   }
   
-  // Use actual configured costs
   const providerCost = packageConfig.cost;
   const profit = price - providerCost;
   const profitMargin = (profit / price) * 100;
@@ -162,12 +242,11 @@ function calculateProfit(network, dataAmount, price) {
   };
 }
 
-// NEW HELPER FUNCTION: Update weekly profit
+// Update weekly profit
 async function updateWeeklyProfit(order) {
   try {
     const orderDate = new Date(order.createdAt || new Date());
     
-    // Calculate week start (Monday) and end (Sunday)
     const dayOfWeek = orderDate.getDay();
     const diff = orderDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
     
@@ -179,32 +258,22 @@ async function updateWeeklyProfit(order) {
     weekEnd.setDate(weekStart.getDate() + 6);
     weekEnd.setHours(23, 59, 59, 999);
     
-    // Calculate week number
     const startOfYear = new Date(weekStart.getFullYear(), 0, 1);
     const daysSinceStart = Math.floor((weekStart - startOfYear) / (24 * 60 * 60 * 1000));
     const weekNumber = Math.ceil((daysSinceStart + startOfYear.getDay() + 1) / 7);
     
-    console.log(`Updating weekly profit for week ${weekNumber} of ${weekStart.getFullYear()}`);
-    console.log(`Week range: ${weekStart.toISOString()} to ${weekEnd.toISOString()}`);
-    console.log(`Order profit: GHS ${order.profit}`);
-    
-    // Find or create weekly profit record
     let weeklyProfit = await WeeklyProfit.findOne({
       weekStartDate: weekStart,
       weekEndDate: weekEnd
     });
     
     if (weeklyProfit) {
-      // Update existing record
       weeklyProfit.totalOrders += 1;
       weeklyProfit.totalRevenue += order.price || 0;
       weeklyProfit.totalCost += order.providerCost || 0;
       weeklyProfit.totalProfit += order.profit || 0;
       await weeklyProfit.save();
-      
-      console.log(`Updated weekly profit - New totals: Orders: ${weeklyProfit.totalOrders}, Profit: GHS ${weeklyProfit.totalProfit}`);
     } else {
-      // Create new record
       weeklyProfit = await WeeklyProfit.create({
         weekStartDate: weekStart,
         weekEndDate: weekEnd,
@@ -216,18 +285,15 @@ async function updateWeeklyProfit(order) {
         totalProfit: order.profit || 0,
         isWithdrawn: false
       });
-      
-      console.log(`Created new weekly profit record - Week ${weekNumber}, Profit: GHS ${order.profit}`);
     }
     
     return weeklyProfit;
   } catch (error) {
     console.error('Error updating weekly profit:', error);
-    // Don't throw - weekly profit failure shouldn't stop the order
   }
 }
 
-// UPDATED HELPER FUNCTION: Update daily analytics (now includes weekly profit update)
+// Update daily analytics
 async function updateDailyAnalytics(order) {
   try {
     const today = new Date();
@@ -235,14 +301,12 @@ async function updateDailyAnalytics(order) {
     
     const networkLower = order.network.toLowerCase();
     
-    // Find or create today's analytics entry
     let analytics = await ProfitAnalytics.findOne({
       date: today,
       network: networkLower
     });
     
     if (analytics) {
-      // Update existing entry
       analytics.totalOrders += 1;
       analytics.totalRevenue += order.price;
       analytics.totalCost += order.providerCost || 0;
@@ -251,7 +315,6 @@ async function updateDailyAnalytics(order) {
         ? (analytics.totalProfit / analytics.totalRevenue) * 100 
         : 0;
       
-      // Update capacity breakdown
       const capacityIndex = analytics.ordersByCapacity.findIndex(
         item => item.capacity === order.dataAmount.toString()
       );
@@ -273,7 +336,6 @@ async function updateDailyAnalytics(order) {
       
       await analytics.save();
     } else {
-      // Create new analytics entry
       await ProfitAnalytics.create({
         date: today,
         network: networkLower,
@@ -292,18 +354,13 @@ async function updateDailyAnalytics(order) {
       });
     }
     
-    console.log(`Analytics updated for ${networkLower} - ${order.dataAmount}GB - Profit: GHS ${order.profit}`);
-    
-    // ALSO UPDATE WEEKLY PROFIT
     await updateWeeklyProfit(order);
-    
   } catch (error) {
     console.error('Error updating analytics:', error);
-    // Don't throw - analytics failure shouldn't stop the order
   }
 }
 
-// Helper function to map network types to DataMart format
+// Map network types to DataMart format
 const mapNetworkToDatamart = (networkType) => {
   const network = networkType.toUpperCase();
   
@@ -320,7 +377,7 @@ const mapNetworkToDatamart = (networkType) => {
   return networkMap[network] || network.toLowerCase();
 };
 
-// Generate unique reference starting with DN
+// Generate unique reference
 const generateDNReference = () => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let randomChars = '';
@@ -352,35 +409,75 @@ const authenticateUser = async (req, res, next) => {
   }
 };
 
-// =====================================================
-// MAIN ROUTE: Process data order with profit tracking
-// =====================================================
+// ===================================================
+// SECURED MAIN ROUTE: Process data order with price validation
+// ===================================================
 router.post('/process-data-order', authenticateUser, async (req, res) => {
   try {
-    const { userId, phoneNumber, network, dataAmount, price, reference } = req.body;
+    const { userId, phoneNumber, network, dataAmount, reference } = req.body;
+    // CRITICAL: Do NOT accept price from client - get it from server config
     
-    // Generate reference if not provided
     const orderReference = reference || generateDNReference();
     
-    // Log the incoming request
+    // ========== SECURITY: GET CORRECT PRICE FROM SERVER ==========
+    let correctPrice;
+    try {
+      correctPrice = getCorrectPrice(network, dataAmount);
+    } catch (priceError) {
+      logDatamartApiInteraction('INVALID_PACKAGE_ATTEMPT', orderReference, {
+        userId,
+        network,
+        dataAmount,
+        error: priceError.message,
+        clientPrice: req.body.price // Log what they tried to send
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: priceError.message 
+      });
+    }
+    
+    // Log if client tried to send different price
+    if (req.body.price && req.body.price !== correctPrice) {
+      logDatamartApiInteraction('PRICE_MANIPULATION_ATTEMPT', orderReference, {
+        userId,
+        network,
+        dataAmount,
+        clientPrice: req.body.price,
+        correctPrice: correctPrice,
+        difference: req.body.price - correctPrice,
+        userAgent: req.headers['user-agent'],
+        ip: req.ip
+      });
+      
+      // You may want to flag this user for suspicious activity
+      // Consider implementing a ban system for repeated attempts
+    }
+    
+    // Use the correct price from server
+    const price = correctPrice;
+    
     logDatamartApiInteraction('REQUEST_RECEIVED', orderReference, {
-      ...req.body,
-      dataAmountType: typeof dataAmount,
-      priceType: typeof price
+      userId,
+      phoneNumber,
+      network,
+      dataAmount,
+      serverPrice: price,
+      clientAttemptedPrice: req.body.price
     });
     
     // Validate required fields
-    if (!userId || !phoneNumber || !network || !dataAmount || !price) {
-      logDatamartApiInteraction('VALIDATION_ERROR', orderReference, {
-        missingFields: {
-          userId: !userId,
-          phoneNumber: !phoneNumber,
-          network: !network,
-          dataAmount: !dataAmount,
-          price: !price
-        }
-      });
+    if (!userId || !phoneNumber || !network || !dataAmount) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+
+    // Validate data amount is positive
+    if (dataAmount <= 0) {
+      logDatamartApiInteraction('INVALID_DATA_AMOUNT', orderReference, {
+        userId,
+        dataAmount
+      });
+      return res.status(400).json({ success: false, error: 'Invalid data amount' });
     }
 
     // Fetch user from database
@@ -396,42 +493,28 @@ router.post('/process-data-order', authenticateUser, async (req, res) => {
         walletBalance: user.walletBalance, 
         requiredAmount: price 
       });
-      return res.status(400).json({ success: false, error: 'Insufficient wallet balance' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Insufficient wallet balance',
+        required: price,
+        available: user.walletBalance
+      });
     }
 
-    // ========== CALCULATE PROFIT FOR THIS ORDER ==========
+    // Calculate profit
     const profitData = calculateProfit(network, dataAmount, price);
     
-    logDatamartApiInteraction('PROFIT_CALCULATED', orderReference, {
-      network,
-      dataAmount,
-      price,
-      ...profitData
-    });
-
-    // Log wallet balance before deduction
-    logDatamartApiInteraction('WALLET_BEFORE_DEDUCTION', orderReference, { 
-      userId, 
-      walletBalanceBefore: user.walletBalance 
-    });
-
-    // Deduct price from user wallet
+    // Deduct from wallet
     user.walletBalance -= price;
     await user.save();
 
-    // Log wallet balance after deduction
-    logDatamartApiInteraction('WALLET_AFTER_DEDUCTION', orderReference, { 
-      userId, 
-      walletBalanceAfter: user.walletBalance 
-    });
-
-    // ========== CREATE ORDER WITH PROFIT FIELDS ==========
+    // Create order with server-validated price
     const newOrder = new DataOrder({
       userId,
       phoneNumber,
       network,
       dataAmount,
-      price,
+      price, // This is now the server-validated price
       providerCost: profitData.providerCost,
       profit: profitData.profit,
       profitMargin: profitData.profitMargin,
@@ -440,21 +523,12 @@ router.post('/process-data-order', authenticateUser, async (req, res) => {
       createdAt: new Date()
     });
 
-    // Save the order
     const savedOrder = await newOrder.save();
     
-    logDatamartApiInteraction('ORDER_CREATED_WITH_PROFIT', orderReference, { 
+    logDatamartApiInteraction('ORDER_CREATED', orderReference, { 
       orderId: savedOrder._id,
-      orderDetails: {
-        userId,
-        phoneNumber,
-        network,
-        dataAmount,
-        price,
-        profit: savedOrder.profit,
-        profitMargin: savedOrder.profitMargin,
-        status: 'pending'
-      }
+      price: savedOrder.price,
+      profit: savedOrder.profit
     });
 
     // Map network to DataMart format
@@ -464,11 +538,6 @@ router.post('/process-data-order', authenticateUser, async (req, res) => {
       // Update order to processing
       savedOrder.status = 'processing';
       await savedOrder.save();
-      
-      logDatamartApiInteraction('ORDER_STATUS_UPDATED', orderReference, {
-        orderId: savedOrder._id,
-        newStatus: 'processing'
-      });
 
       // Prepare DataMart API payload
       const payload = {
@@ -479,21 +548,8 @@ router.post('/process-data-order', authenticateUser, async (req, res) => {
         ref: orderReference
       };
 
-      // Log the API request details
-      logDatamartApiInteraction('DATAMART_API_REQUEST', orderReference, {
-        url: '/api/developer/purchase',
-        payload
-      });
-
       // Call DataMart API
       const response = await datamartClient.post('/api/developer/purchase', payload);
-
-      // Log the API response
-      logDatamartApiInteraction('DATAMART_API_RESPONSE', orderReference, {
-        status: response.status,
-        statusText: response.statusText,
-        data: response.data
-      });
 
       // If API returns success
       if (response.data && response.data.status === 'success') {
@@ -503,18 +559,10 @@ router.post('/process-data-order', authenticateUser, async (req, res) => {
         savedOrder.apiResponse = response.data;
         await savedOrder.save();
 
-        // ========== UPDATE DAILY ANALYTICS AND WEEKLY PROFIT ==========
+        // Update analytics
         await updateDailyAnalytics(savedOrder);
 
-        logDatamartApiInteraction('ORDER_COMPLETED_WITH_PROFIT', orderReference, {
-          orderId: savedOrder._id,
-          purchaseId: response.data.data?.purchaseId,
-          profit: savedOrder.profit,
-          analyticsUpdated: true,
-          weeklyProfitUpdated: true
-        });
-
-        // Create a transaction record
+        // Create transaction record
         const transaction = new Transaction({
           userId,
           type: 'purchase',
@@ -541,30 +589,17 @@ router.post('/process-data-order', authenticateUser, async (req, res) => {
           message: 'Data bundle purchased successfully',
           orderId: savedOrder._id,
           reference: savedOrder.reference,
-          purchaseId: response.data.data?.purchaseId
+          purchaseId: response.data.data?.purchaseId,
+          price: price // Return the actual price charged
         });
       } else {
-        // Handle non-success response
         throw new Error(response.data?.message || 'Transaction failed with DataMart');
       }
 
     } catch (error) {
-      // Log the error
-      logDatamartApiInteraction('DATAMART_API_ERROR', orderReference, {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      
       // Refund user
       user.walletBalance += price;
       await user.save();
-
-      logDatamartApiInteraction('WALLET_REFUNDED', orderReference, {
-        userId,
-        refundAmount: price,
-        newBalance: user.walletBalance
-      });
 
       savedOrder.status = 'failed';
       savedOrder.failureReason = error.response?.data?.message || error.message || 'API request failed';
@@ -583,7 +618,6 @@ router.post('/process-data-order', authenticateUser, async (req, res) => {
     }
     
   } catch (error) {
-    // Log unhandled errors
     logDatamartApiInteraction('UNHANDLED_ERROR', req.body?.reference || 'unknown', {
       message: error.message,
       stack: error.stack
@@ -598,15 +632,14 @@ router.post('/process-data-order', authenticateUser, async (req, res) => {
   }
 });
 
-// =====================================================
-// AFA Registration route with profit tracking
-// =====================================================
+// ===================================================
+// SECURED AFA Registration route
+// ===================================================
 router.post('/process-afa-registration', authenticateUser, async (req, res) => {
   try {
     const { 
       userId, 
       phoneNumber, 
-      price, 
       reference,
       fullName,
       idType,
@@ -616,14 +649,29 @@ router.post('/process-afa-registration', authenticateUser, async (req, res) => {
       location
     } = req.body;
     
-    // Generate reference if not provided
+    // CRITICAL: Fixed price for AFA registration
+    const price = 10.00; // Server-controlled price
+    
     const orderReference = reference || generateDNReference();
     
-    // Log the incoming request
-    logDatamartApiInteraction('AFA_REGISTRATION_REQUEST', orderReference, req.body);
+    // Log if client tried to send different price
+    if (req.body.price && req.body.price !== price) {
+      logDatamartApiInteraction('AFA_PRICE_MANIPULATION_ATTEMPT', orderReference, {
+        userId,
+        clientPrice: req.body.price,
+        correctPrice: price,
+        userAgent: req.headers['user-agent'],
+        ip: req.ip
+      });
+    }
+    
+    logDatamartApiInteraction('AFA_REGISTRATION_REQUEST', orderReference, {
+      ...req.body,
+      serverPrice: price
+    });
     
     // Validate required fields
-    if (!userId || !phoneNumber || !price || !fullName || !idType || !idNumber || !dateOfBirth || !occupation || !location) {
+    if (!userId || !phoneNumber || !fullName || !idType || !idNumber || !dateOfBirth || !occupation || !location) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
@@ -635,15 +683,20 @@ router.post('/process-afa-registration', authenticateUser, async (req, res) => {
 
     // Check if user has enough balance
     if (user.walletBalance < price) {
-      return res.status(400).json({ success: false, error: 'Insufficient wallet balance' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Insufficient wallet balance',
+        required: price,
+        available: user.walletBalance
+      });
     }
 
     // Generate random capacity value between 10 and 50
     const randomCapacity = Math.floor(Math.random() * 41) + 10;
 
-    // Calculate profit for AFA registration (use higher margin for AFA)
+    // Calculate profit for AFA registration
     const profitData = {
-      providerCost: price * 0.7,  // 30% margin for AFA
+      providerCost: price * 0.7,
       profit: price * 0.3,
       profitMargin: 30
     };
@@ -652,20 +705,19 @@ router.post('/process-afa-registration', authenticateUser, async (req, res) => {
     user.walletBalance -= price;
     await user.save();
 
-    // Create a new order with profit
+    // Create a new order
     const newOrder = new DataOrder({
       userId,
       phoneNumber,
       network: 'afa-registration',
       dataAmount: randomCapacity,
-      price,
+      price, // Server-controlled price
       providerCost: profitData.providerCost,
       profit: profitData.profit,
       profitMargin: profitData.profitMargin,
       reference: orderReference,
       status: 'pending',
       createdAt: new Date(),
-      // Add AFA specific fields
       fullName,
       idType,
       idNumber,
@@ -674,22 +726,17 @@ router.post('/process-afa-registration', authenticateUser, async (req, res) => {
       location
     });
 
-    // Save the order
     const savedOrder = await newOrder.save();
-    logDatamartApiInteraction('AFA_REGISTRATION_CREATED', orderReference, { 
-      orderId: savedOrder._id,
-      profit: savedOrder.profit 
-    });
-
-    // Update order status to completed (AFA is processed internally)
+    
+    // Complete the order
     savedOrder.status = 'completed';
     savedOrder.completedAt = new Date();
     await savedOrder.save();
     
-    // UPDATE ANALYTICS AND WEEKLY PROFIT FOR AFA
+    // Update analytics
     await updateDailyAnalytics(savedOrder);
     
-    // Create a transaction record
+    // Create transaction record
     const transaction = new Transaction({
       userId,
       type: 'purchase',
@@ -708,39 +755,29 @@ router.post('/process-afa-registration', authenticateUser, async (req, res) => {
     });
     
     await transaction.save();
-    logDatamartApiInteraction('AFA_REGISTRATION_TRANSACTION', orderReference, { 
-      transactionId: transaction._id 
-    });
 
     return res.json({
       success: true,
       message: 'AFA Registration completed successfully',
       orderId: savedOrder._id,
       reference: savedOrder.reference,
-      capacity: randomCapacity
+      capacity: randomCapacity,
+      price: price // Return actual price charged
     });
     
   } catch (error) {
     console.error('Error processing AFA registration:', error);
     
-    logDatamartApiInteraction('AFA_REGISTRATION_ERROR', req.body?.reference || 'unknown', {
-      error: error.message
-    });
-    
-    // Try to refund if error occurred after deduction
-    if (req.body?.userId && req.body?.price) {
+    // Try to refund if error occurred
+    if (req.body?.userId) {
       try {
         const user = await User.findById(req.body.userId);
         if (user) {
-          user.walletBalance += req.body.price;
+          user.walletBalance += 10.00; // Refund the fixed price
           await user.save();
-          logDatamartApiInteraction('AFA_REGISTRATION_REFUND', req.body.reference || 'unknown', {
-            userId: req.body.userId,
-            amount: req.body.price
-          });
         }
       } catch (refundError) {
-        console.error('Failed to refund user after AFA registration error:', refundError);
+        console.error('Failed to refund user:', refundError);
       }
     }
     
@@ -751,14 +788,49 @@ router.post('/process-afa-registration', authenticateUser, async (req, res) => {
   }
 });
 
-// =====================================================
-// Check order status using DataMart API
-// =====================================================
+// ===================================================
+// Public route to get bundle prices (clients should use this)
+// ===================================================
+router.get('/bundle-prices', async (req, res) => {
+  try {
+    const { network } = req.query;
+    
+    if (network) {
+      const networkLower = network.toLowerCase();
+      const prices = BUNDLE_PRICING[networkLower];
+      
+      if (!prices) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid network'
+        });
+      }
+      
+      return res.json({
+        success: true,
+        network: networkLower,
+        prices
+      });
+    }
+    
+    // Return all prices
+    return res.json({
+      success: true,
+      prices: BUNDLE_PRICING
+    });
+  } catch (error) {
+    console.error('Error fetching bundle prices:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch bundle prices'
+    });
+  }
+});
+
+// Check order status
 router.get('/order-status/:reference', authenticateUser, async (req, res) => {
   try {
     const { reference } = req.params;
-    
-    logDatamartApiInteraction('STATUS_CHECK_REQUEST', reference, { requestParams: req.params });
     
     if (!reference) {
       return res.status(400).json({ success: false, error: 'Missing reference' });
@@ -767,11 +839,10 @@ router.get('/order-status/:reference', authenticateUser, async (req, res) => {
     const order = await DataOrder.findOne({ reference });
     
     if (!order) {
-      logDatamartApiInteraction('STATUS_CHECK_FAILED', reference, { error: 'Order not found' });
       return res.status(404).json({ success: false, error: 'Order not found' });
     }
     
-    // If order has a DataMart purchase ID, check status with DataMart
+    // Check with DataMart if processing
     if (order.transactionId && order.status === 'processing') {
       try {
         const response = await datamartClient.get(`/api/purchase-status/${order.transactionId}`);
@@ -780,26 +851,12 @@ router.get('/order-status/:reference', authenticateUser, async (req, res) => {
           order.status = 'completed';
           order.completedAt = new Date();
           await order.save();
-          
-          // Update analytics and weekly profit when order completes
           await updateDailyAnalytics(order);
-          
-          logDatamartApiInteraction('ORDER_STATUS_UPDATED_FROM_DATAMART', reference, {
-            orderId: order._id,
-            newStatus: 'completed'
-          });
         }
       } catch (datamartError) {
-        logDatamartApiInteraction('DATAMART_STATUS_CHECK_ERROR', reference, {
-          error: datamartError.message
-        });
+        console.error('DataMart status check error:', datamartError);
       }
     }
-    
-    logDatamartApiInteraction('STATUS_CHECK_RESPONSE', reference, { 
-      orderId: order._id,
-      status: order.status 
-    });
     
     return res.json({
       success: true,
@@ -820,11 +877,6 @@ router.get('/order-status/:reference', authenticateUser, async (req, res) => {
     });
   } catch (error) {
     console.error('Error checking order status:', error);
-    
-    logDatamartApiInteraction('STATUS_CHECK_ERROR', req.params.reference || 'unknown', {
-      error: error.message
-    });
-    
     res.status(500).json({
       success: false,
       error: 'Failed to check order status'
@@ -832,14 +884,10 @@ router.get('/order-status/:reference', authenticateUser, async (req, res) => {
   }
 });
 
-// =====================================================
-// Get all orders for a specific user
-// =====================================================
+// Get user orders
 router.get('/user-orders/:userId', authenticateUser, async (req, res) => {
   try {
     const { userId } = req.params;
-    
-    logDatamartApiInteraction('USER_ORDERS_REQUEST', 'N/A', { userId });
     
     if (!userId) {
       return res.status(400).json({ success: false, error: 'User ID is required' });
@@ -848,11 +896,6 @@ router.get('/user-orders/:userId', authenticateUser, async (req, res) => {
     const orders = await DataOrder.find({ userId })
       .sort({ createdAt: -1 })
       .select('-__v -apiResponse');
-    
-    logDatamartApiInteraction('USER_ORDERS_RESPONSE', 'N/A', { 
-      userId,
-      orderCount: orders.length 
-    });
     
     return res.json({
       success: true,
@@ -872,7 +915,6 @@ router.get('/user-orders/:userId', authenticateUser, async (req, res) => {
           failureReason: order.failureReason || null
         };
         
-        // Add AFA-specific fields if this is an AFA registration
         if (order.network === 'afa-registration') {
           orderData.fullName = order.fullName;
           orderData.idType = order.idType;
@@ -887,18 +929,13 @@ router.get('/user-orders/:userId', authenticateUser, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching user orders:', error);
-    
-    logDatamartApiInteraction('USER_ORDERS_ERROR', 'N/A', {
-      userId: req.params.userId,
-      error: error.message
-    });
-    
     res.status(500).json({
       success: false,
       error: 'Failed to fetch user orders'
     });
   }
 });
+
 
 // =====================================================
 // Get available data packages from DataMart

@@ -14,13 +14,43 @@ const errorLogger = (error, route) => {
 // ====== ORDER MANAGEMENT ROUTES ======
 
 // Get all orders (admin and agent)
+// Get all orders with pagination
 router.get('/orders', auth, authorize('admin'), async (req, res) => {
   try {
-    const orders = await DataOrder.find()
-      .sort({ createdAt: -1 })
-      .populate('userId', 'name email');
+    const { page = 1, limit = 50, status, search } = req.query;
     
-    res.json(orders);
+    // Build filter
+    const filter = {};
+    if (status) filter.status = status;
+    if (search) {
+      filter.$or = [
+        { phoneNumber: { $regex: search, $options: 'i' } },
+        { '_id': { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Get orders with pagination
+    const orders = await DataOrder.find(filter)
+      .sort({ createdAt: -1 })
+      .populate('userId', 'name email')
+      .skip(skip)
+      .limit(parseInt(limit));
+    
+    // Get total count
+    const totalOrders = await DataOrder.countDocuments(filter);
+    
+    res.json({
+      orders,
+      pagination: {
+        total: totalOrders,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(totalOrders / parseInt(limit))
+      }
+    });
   } catch (error) {
     errorLogger(error, 'Get All Orders');
     res.status(500).json({ message: 'Server error', error: error.message });
