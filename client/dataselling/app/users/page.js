@@ -1,462 +1,811 @@
-// pages/admin/users/credit.js
+// pages/admin/WalletManagement.js
 'use client'
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Head from 'next/head';
-import { 
-  Users, 
-  CreditCard, 
-  Search, 
-  ArrowLeft, 
-  PlusCircle,
-  UserCheck,
-  AlertCircle
-} from 'lucide-react';
 import axios from 'axios';
 
-export default function CreditUserPage() {
+const WalletManagement = () => {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  
+  // User search and selection
+  const [searchTerm, setSearchTerm] = useState('');
   const [users, setUsers] = useState([]);
-  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  
+  // Transaction states
+  const [transactionType, setTransactionType] = useState('deposit'); // 'deposit' or 'deduct'
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCreditLoading, setIsCreditLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-
-  // Check authentication on mount
+  const [reason, setReason] = useState('');
+  
+  // Bulk operation states
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [bulkAmount, setBulkAmount] = useState('');
+  const [bulkDescription, setBulkDescription] = useState('');
+  const [bulkReason, setBulkReason] = useState('');
+  
+  // Results and messages
+  const [message, setMessage] = useState({ text: '', type: '' });
+  const [transactionHistory, setTransactionHistory] = useState([]);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingTransaction, setPendingTransaction] = useState(null);
+  
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('userrole');
+    // Check if user is admin
+    const userRole = localStorage.getItem('userrole');
+    if (userRole !== 'admin') {
+      router.push('/dashboard');
+      return;
+    }
     
-    if (!token || role !== 'admin') {
-      router.push('/Auth');
-    } else {
-      fetchUsers(1, searchQuery);
+    // Check dark mode preference
+    if (typeof window !== 'undefined') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const storedTheme = localStorage.getItem('theme');
+      setDarkMode(storedTheme === 'dark' || (storedTheme !== 'light' && prefersDark));
     }
-  }, []);
-
-  // Fetch users
-  const fetchUsers = async (page, search = '') => {
-    setIsLoading(true);
+  }, [router]);
+  
+  // Search users
+  const searchUsers = async () => {
+    if (!searchTerm.trim()) {
+      setUsers([]);
+      return;
+    }
+    
     try {
+      setSearchLoading(true);
       const token = localStorage.getItem('token');
+      
       const response = await axios.get(
-        `https://datamall.onrender.com/api/users?page=${page}&limit=10&search=${search}`,
+        `https://datamall.onrender.com/api/users?search=${searchTerm}&limit=10`,
         {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         }
       );
       
-      setUsers(response.data.users);
-      setTotalPages(response.data.pagination.pages);
-      setCurrentPage(page);
+      if (response.data.users) {
+        setUsers(response.data.users);
+      }
     } catch (error) {
-      console.error('Error fetching users:', error);
-      setErrorMessage('Failed to load users. Please try again.');
+      console.error('Error searching users:', error);
+      setMessage({ text: 'Failed to search users', type: 'error' });
     } finally {
-      setIsLoading(false);
+      setSearchLoading(false);
     }
   };
-
-  // Handle user selection
-  const toggleUserSelection = (userId) => {
-    if (selectedUsers.includes(userId)) {
-      setSelectedUsers(prev => prev.filter(id => id !== userId));
-    } else {
-      setSelectedUsers(prev => [...prev, userId]);
-    }
+  
+  // Handle user search input change
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (searchTerm) {
+        searchUsers();
+      } else {
+        setUsers([]);
+      }
+    }, 500);
+    
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm]);
+  
+  // Select user for transaction
+  const selectUser = (user) => {
+    setSelectedUser(user);
+    setUsers([]);
+    setSearchTerm('');
+    fetchUserTransactions(user._id);
   };
-
-  // Handle search
-  const handleSearch = (e) => {
-    e.preventDefault();
-    fetchUsers(1, searchQuery);
+  
+  // Toggle user selection for bulk operations
+  const toggleUserSelection = (user) => {
+    setSelectedUsers(prev => {
+      const isSelected = prev.some(u => u._id === user._id);
+      if (isSelected) {
+        return prev.filter(u => u._id !== user._id);
+      } else {
+        return [...prev, user];
+      }
+    });
   };
-
-  // Handle pagination
-  const changePage = (page) => {
-    if (page < 1 || page > totalPages || page === currentPage) return;
-    fetchUsers(page, searchQuery);
-  };
-
-  // Single user credit function
-  const creditSingleUser = async (userId) => {
-    if (!amount || parseFloat(amount) <= 0) {
-      setErrorMessage('Please enter a valid amount');
-      return;
-    }
-
-    setIsCreditLoading(true);
-    setSuccessMessage('');
-    setErrorMessage('');
-
+  
+  // Fetch user transaction history
+  const fetchUserTransactions = async (userId) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.post(
-        `https://datamall.onrender.com/api/users/${userId}/deposit`,
+      
+      const response = await axios.get(
+        `https://datamall.onrender.com/api/users/${userId}/transactions?limit=10`,
         {
-          amount: parseFloat(amount),
-          description: description || `Credit by admin`
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         }
       );
       
-      setSuccessMessage('User credited successfully');
-      // Reset form
-      setAmount('');
-      setDescription('');
+      if (response.data.transactions) {
+        setTransactionHistory(response.data.transactions);
+      }
     } catch (error) {
-      console.error('Error crediting user:', error);
-      setErrorMessage(error.response?.data?.message || 'Failed to credit user. Please try again.');
-    } finally {
-      setIsCreditLoading(false);
+      console.error('Error fetching transactions:', error);
     }
   };
-
-  // Bulk credit function
-  const creditMultipleUsers = async () => {
-    if (selectedUsers.length === 0) {
-      setErrorMessage('Please select at least one user');
-      return;
+  
+  // Validate transaction
+  const validateTransaction = () => {
+    if (!bulkMode && !selectedUser) {
+      setMessage({ text: 'Please select a user', type: 'error' });
+      return false;
     }
-
-    if (!amount || parseFloat(amount) <= 0) {
-      setErrorMessage('Please enter a valid amount');
-      return;
+    
+    if (bulkMode && selectedUsers.length === 0) {
+      setMessage({ text: 'Please select at least one user', type: 'error' });
+      return false;
     }
-
-    setIsCreditLoading(true);
-    setSuccessMessage('');
-    setErrorMessage('');
-
+    
+    const checkAmount = bulkMode ? bulkAmount : amount;
+    const amountNum = parseFloat(checkAmount);
+    
+    if (!checkAmount || amountNum <= 0) {
+      setMessage({ text: 'Please enter a valid amount', type: 'error' });
+      return false;
+    }
+    
+    if (amountNum > 10000) {
+      setMessage({ text: 'Amount cannot exceed GH₵ 10,000', type: 'error' });
+      return false;
+    }
+    
+    const checkDescription = bulkMode ? bulkDescription : description;
+    if (!checkDescription.trim()) {
+      setMessage({ text: 'Please enter a description', type: 'error' });
+      return false;
+    }
+    
+    if (transactionType === 'deduct') {
+      if (!bulkMode && selectedUser && selectedUser.walletBalance < amountNum) {
+        setMessage({ text: `Insufficient balance. User has GH₵ ${selectedUser.walletBalance}`, type: 'error' });
+        return false;
+      }
+      
+      const checkReason = bulkMode ? bulkReason : reason;
+      if (!checkReason.trim()) {
+        setMessage({ text: 'Please provide a reason for deduction', type: 'error' });
+        return false;
+      }
+    }
+    
+    return true;
+  };
+  
+  // Prepare transaction for confirmation
+  const initiateTransaction = () => {
+    if (!validateTransaction()) return;
+    
+    const transaction = {
+      type: transactionType,
+      amount: parseFloat(bulkMode ? bulkAmount : amount),
+      description: bulkMode ? bulkDescription : description,
+      reason: bulkMode ? bulkReason : reason,
+      isBulk: bulkMode,
+      users: bulkMode ? selectedUsers : [selectedUser]
+    };
+    
+    setPendingTransaction(transaction);
+    setShowConfirmDialog(true);
+  };
+  
+  // Process single transaction
+  const processSingleTransaction = async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('token');
+      
+      const endpoint = transactionType === 'deposit' 
+        ? `/users/${selectedUser._id}/deposit`
+        : `/users/${selectedUser._id}/deduct`;
+      
+      const payload = {
+        amount: parseFloat(amount),
+        description: description
+      };
+      
+      if (transactionType === 'deduct') {
+        payload.reason = reason;
+      }
+      
       const response = await axios.post(
-        `/api/admin/bulk-credit`,
+        `https://datamall.onrender.com/api${endpoint}`,
+        payload,
         {
-          userIds: selectedUsers,
-          amount: parseFloat(amount),
-          description: description || `Bulk credit by admin`
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         }
       );
       
-      setSuccessMessage(`Successfully credited ${response.data.summary.successful} users`);
-      
-      // Reset form and selection
-      setSelectedUsers([]);
-      setAmount('');
-      setDescription('');
-      
-      // Refresh user list
-      fetchUsers(currentPage, searchQuery);
+      if (response.data) {
+        setMessage({
+          text: `Successfully ${transactionType === 'deposit' ? 'added' : 'deducted'} GH₵ ${amount} ${transactionType === 'deposit' ? 'to' : 'from'} ${selectedUser.name}'s wallet`,
+          type: 'success'
+        });
+        
+        // Update selected user balance
+        setSelectedUser(prev => ({
+          ...prev,
+          walletBalance: response.data[transactionType === 'deposit' ? 'deposit' : 'deduction'].newBalance
+        }));
+        
+        // Refresh transaction history
+        fetchUserTransactions(selectedUser._id);
+        
+        // Clear form
+        setAmount('');
+        setDescription('');
+        setReason('');
+      }
     } catch (error) {
-      console.error('Error bulk crediting users:', error);
-      setErrorMessage(error.response?.data?.message || 'Failed to credit users. Please try again.');
+      console.error('Transaction error:', error);
+      setMessage({
+        text: error.response?.data?.error || 'Transaction failed',
+        type: 'error'
+      });
     } finally {
-      setIsCreditLoading(false);
+      setLoading(false);
+      setShowConfirmDialog(false);
     }
   };
-
-  return (
-    <>
-      <Head>
-        <title>Credit User Wallets | Admin Dashboard</title>
-      </Head>
-
-      <div className="container mx-auto px-4 py-8 dark:bg-gray-900 min-h-screen">
-        {/* Improved Header with larger text */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center">
-            <button 
-              onClick={() => router.back()} 
-              className="mr-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-900 dark:text-white"
-            >
-              <ArrowLeft className="h-6 w-6" />
-            </button>
-            <h1 className="text-2xl md:text-3xl font-bold flex items-center text-gray-900 dark:text-white">
-              <CreditCard className="mr-2 md:mr-3 h-6 w-6 md:h-8 md:w-8" />
-              <span className="flex-shrink-0">Credit User Wallets</span>
-            </h1>
-          </div>
-        </div>
-
-        {/* Improved Success Message with dark mode support */}
-        {successMessage && (
-          <div className="bg-green-100 dark:bg-green-900 border-l-4 border-green-600 p-4 md:p-5 mb-6 rounded">
-            <div className="flex items-center">
-              <UserCheck className="h-5 w-5 md:h-6 md:w-6 text-green-600 dark:text-green-400 mr-3 flex-shrink-0" />
-              <p className="text-green-800 dark:text-green-300 font-medium text-base md:text-lg">{successMessage}</p>
+  
+  // Process bulk transaction
+  const processBulkTransaction = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const endpoint = transactionType === 'deposit' 
+        ? '/bulk-credit'
+        : '/bulk-deduct';
+      
+      const payload = {
+        userIds: selectedUsers.map(u => u._id),
+        amount: parseFloat(bulkAmount),
+        description: bulkDescription
+      };
+      
+      if (transactionType === 'deduct') {
+        payload.reason = bulkReason;
+      }
+      
+      const response = await axios.post(
+        `https://datamall.onrender.com/api${endpoint}`,
+        payload,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      );
+      
+      if (response.data) {
+        const summary = response.data.summary;
+        setMessage({
+          text: `Bulk ${transactionType} completed: ${summary.successful} successful, ${summary.failed} failed`,
+          type: summary.failed > 0 ? 'warning' : 'success'
+        });
+        
+        // Clear selections
+        setSelectedUsers([]);
+        setBulkAmount('');
+        setBulkDescription('');
+        setBulkReason('');
+      }
+    } catch (error) {
+      console.error('Bulk transaction error:', error);
+      setMessage({
+        text: error.response?.data?.error || 'Bulk transaction failed',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+      setShowConfirmDialog(false);
+    }
+  };
+  
+  // Execute confirmed transaction
+  const executeTransaction = () => {
+    if (bulkMode) {
+      processBulkTransaction();
+    } else {
+      processSingleTransaction();
+    }
+  };
+  
+  // Format currency
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-GH', {
+      style: 'currency',
+      currency: 'GHS',
+      minimumFractionDigits: 2
+    }).format(amount);
+  };
+  
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+  };
+  
+  // Theme classes
+  const getBgColor = (type) => {
+    switch(type) {
+      case 'main': return darkMode ? 'bg-gray-900' : 'bg-gray-50';
+      case 'card': return darkMode ? 'bg-gray-800' : 'bg-white';
+      case 'input': return darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900';
+      default: return darkMode ? 'bg-gray-800' : 'bg-white';
+    }
+  };
+  
+  const getTextColor = (type) => {
+    switch(type) {
+      case 'primary': return darkMode ? 'text-white' : 'text-gray-900';
+      case 'secondary': return darkMode ? 'text-gray-300' : 'text-gray-600';
+      case 'muted': return darkMode ? 'text-gray-400' : 'text-gray-500';
+      default: return darkMode ? 'text-white' : 'text-gray-900';
+    }
+  };
+  
+  // Confirmation Dialog
+  const ConfirmationDialog = () => {
+    if (!showConfirmDialog || !pendingTransaction) return null;
+    
+    const totalAmount = pendingTransaction.amount * pendingTransaction.users.length;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className={`${getBgColor('card')} rounded-lg shadow-xl max-w-md w-full p-6`}>
+          <h3 className={`text-xl font-bold ${getTextColor('primary')} mb-4`}>
+            Confirm {pendingTransaction.type === 'deposit' ? 'Deposit' : 'Deduction'}
+          </h3>
+          
+          <div className="space-y-3 mb-6">
+            <div className={`p-3 bg-gray-100 dark:bg-gray-700 rounded`}>
+              <p className={`text-sm ${getTextColor('muted')}`}>Type</p>
+              <p className={`font-medium ${getTextColor('primary')} capitalize`}>
+                {pendingTransaction.type}
+              </p>
             </div>
-          </div>
-        )}
-
-        {/* Improved Error Message with dark mode support */}
-        {errorMessage && (
-          <div className="bg-red-100 dark:bg-red-900 border-l-4 border-red-600 p-4 md:p-5 mb-6 rounded">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 md:h-6 md:w-6 text-red-600 dark:text-red-400 mr-3 flex-shrink-0" />
-              <p className="text-red-800 dark:text-red-300 font-medium text-base md:text-lg">{errorMessage}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-          {/* Credit Form with dark mode support */}
-          <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-lg shadow-md lg:col-span-1 border border-gray-300 dark:border-gray-700">
-            <h2 className="text-xl font-semibold mb-4 md:mb-5 text-gray-900 dark:text-white">Credit Information</h2>
             
-            <div className="mb-4 md:mb-5">
-              <label className="block text-base font-medium text-gray-800 dark:text-gray-200 mb-2">
-                Amount (GHS)
-              </label>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="Enter amount"
-                min="0"
-                step="0.01"
-                className="w-full p-3 border border-gray-400 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
+            <div className={`p-3 bg-gray-100 dark:bg-gray-700 rounded`}>
+              <p className={`text-sm ${getTextColor('muted')}`}>
+                {pendingTransaction.isBulk ? 'Recipients' : 'Recipient'}
+              </p>
+              <p className={`font-medium ${getTextColor('primary')}`}>
+                {pendingTransaction.isBulk 
+                  ? `${pendingTransaction.users.length} users selected`
+                  : pendingTransaction.users[0]?.name
+                }
+              </p>
             </div>
             
-            <div className="mb-5 md:mb-6">
-              <label className="block text-base font-medium text-gray-800 dark:text-gray-200 mb-2">
-                Description (Optional)
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Enter description"
-                rows="3"
-                className="w-full p-3 border border-gray-400 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
+            <div className={`p-3 bg-gray-100 dark:bg-gray-700 rounded`}>
+              <p className={`text-sm ${getTextColor('muted')}`}>
+                {pendingTransaction.isBulk ? 'Amount per user' : 'Amount'}
+              </p>
+              <p className={`font-medium ${getTextColor('primary')}`}>
+                {formatCurrency(pendingTransaction.amount)}
+              </p>
             </div>
             
-            <div>
-              <button
-                onClick={creditMultipleUsers}
-                disabled={isCreditLoading || selectedUsers.length === 0}
-                className={`w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-blue-600 dark:hover:bg-blue-700 ${
-                  (isCreditLoading || selectedUsers.length === 0) ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {isCreditLoading ? (
-                  <span className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Processing...
-                  </span>
-                ) : (
-                  <span className="flex items-center">
-                    <PlusCircle className="mr-2 h-5 w-5" />
-                    Credit Selected Users ({selectedUsers.length})
-                  </span>
-                )}
-              </button>
+            {pendingTransaction.isBulk && (
+              <div className={`p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded`}>
+                <p className={`text-sm ${getTextColor('muted')}`}>Total Amount</p>
+                <p className={`font-bold text-lg ${getTextColor('primary')}`}>
+                  {formatCurrency(totalAmount)}
+                </p>
+              </div>
+            )}
+            
+            <div className={`p-3 bg-gray-100 dark:bg-gray-700 rounded`}>
+              <p className={`text-sm ${getTextColor('muted')}`}>Description</p>
+              <p className={`${getTextColor('primary')}`}>
+                {pendingTransaction.description}
+              </p>
             </div>
+            
+            {pendingTransaction.type === 'deduct' && pendingTransaction.reason && (
+              <div className={`p-3 bg-red-100 dark:bg-red-900/30 rounded`}>
+                <p className={`text-sm ${getTextColor('muted')}`}>Reason</p>
+                <p className={`${getTextColor('primary')}`}>
+                  {pendingTransaction.reason}
+                </p>
+              </div>
+            )}
           </div>
           
-          {/* User Selection with dark mode support */}
-          <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-lg shadow-md lg:col-span-2 border border-gray-300 dark:border-gray-700">
-            <div className="flex flex-col md:flex-row justify-between md:items-center mb-4 md:mb-5 space-y-3 md:space-y-0">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Select Users</h2>
-              
-              <form onSubmit={handleSearch} className="flex w-full md:w-auto">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search users..."
-                  className="w-full md:w-auto p-2 border border-gray-400 dark:border-gray-600 rounded-l-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
-                <button
-                  type="submit"
-                  className="bg-gray-200 dark:bg-gray-600 p-2 border border-l-0 border-gray-400 dark:border-gray-600 rounded-r-md hover:bg-gray-300 dark:hover:bg-gray-500"
-                >
-                  <Search className="h-5 w-5 text-gray-700 dark:text-gray-200" />
-                </button>
-              </form>
-            </div>
-            
-            {isLoading ? (
-              <div className="flex justify-center items-center h-64">
-                <svg className="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto shadow-md border border-gray-300 dark:border-gray-700 sm:rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-700">
-                    <thead className="bg-gray-100 dark:bg-gray-700">
-                      <tr>
-                        <th className="w-12 px-4 py-3 text-left text-xs md:text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          <input
-                            type="checkbox"
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedUsers(users.map(user => user._id));
-                              } else {
-                                setSelectedUsers([]);
-                              }
-                            }}
-                            checked={users.length > 0 && selectedUsers.length === users.length}
-                            className="h-4 w-4 md:h-5 md:w-5 text-blue-600 border-gray-400 dark:border-gray-600 rounded focus:ring-blue-500"
-                          />
-                        </th>
-                        <th className="px-2 md:px-4 py-3 text-left text-xs md:text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Name
-                        </th>
-                        <th className="px-2 md:px-4 py-3 text-left text-xs md:text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Email
-                        </th>
-                        <th className="px-2 md:px-4 py-3 text-left text-xs md:text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Balance
-                        </th>
-                        <th className="px-2 md:px-4 py-3 text-left text-xs md:text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-300 dark:divide-gray-700">
-                      {users.length > 0 ? (
-                        users.map((user) => (
-                          <tr key={user._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                            <td className="px-2 md:px-4 py-3 md:py-4 whitespace-nowrap">
-                              <input
-                                type="checkbox"
-                                onChange={() => toggleUserSelection(user._id)}
-                                checked={selectedUsers.includes(user._id)}
-                                className="h-4 w-4 md:h-5 md:w-5 text-blue-600 border-gray-400 dark:border-gray-600 rounded focus:ring-blue-500"
-                              />
-                            </td>
-                            <td className="px-2 md:px-4 py-3 md:py-4 whitespace-nowrap">
-                              <div className="text-sm md:text-base font-medium text-gray-900 dark:text-white">{user.name}</div>
-                            </td>
-                            <td className="px-2 md:px-4 py-3 md:py-4 whitespace-nowrap">
-                              <div className="text-sm md:text-base text-gray-700 dark:text-gray-300">{user.email}</div>
-                            </td>
-                            <td className="px-2 md:px-4 py-3 md:py-4 whitespace-nowrap">
-                              <div className="text-sm md:text-base font-medium text-gray-900 dark:text-white">GHS {user.walletBalance.toFixed(2)}</div>
-                            </td>
-                            <td className="px-2 md:px-4 py-3 md:py-4 whitespace-nowrap text-sm md:text-base">
-                              <button
-                                onClick={() => creditSingleUser(user._id)}
-                                disabled={isCreditLoading || !amount}
-                                className={`inline-flex items-center px-2 md:px-4 py-1 md:py-2 border border-transparent rounded-md shadow-sm text-sm md:text-base font-medium text-white bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${
-                                  (isCreditLoading || !amount) ? 'opacity-50 cursor-not-allowed' : ''
-                                }`}
-                              >
-                                <PlusCircle className="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5" />
-                                Credit
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="5" className="px-4 md:px-6 py-4 text-center text-sm md:text-base text-gray-700 dark:text-gray-300 font-medium">
-                            No users found
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Improved Pagination with dark mode support */}
-                {totalPages > 1 && (
-                  <div className="flex justify-center mt-4 md:mt-6 overflow-x-auto">
-                    <nav className="inline-flex rounded-md shadow-md">
-                      <button
-                        onClick={() => changePage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className={`relative inline-flex items-center px-2 md:px-4 py-1 md:py-2 rounded-l-md border border-gray-400 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm md:text-base font-medium ${
-                          currentPage === 1 
-                            ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed' 
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                        }`}
-                      >
-                        Previous
-                      </button>
-                      
-                      {[...Array(totalPages)].map((_, index) => {
-                        // Show limited page numbers on mobile
-                        const pageNum = index + 1;
-                        const showPage = 
-                          pageNum === 1 || 
-                          pageNum === totalPages || 
-                          Math.abs(pageNum - currentPage) <= 1;
-                        
-                        if (!showPage && (
-                          (pageNum === 2 && currentPage > 3) || 
-                          (pageNum === totalPages - 1 && currentPage < totalPages - 2)
-                        )) {
-                          return (
-                            <span 
-                              key={`ellipsis-${index}`}
-                              className="relative inline-flex items-center px-3 md:px-4 py-1 md:py-2 border border-gray-400 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm md:text-base"
-                            >
-                              ...
-                            </span>
-                          );
-                        }
-                        
-                        return showPage ? (
-                          <button
-                            key={pageNum}
-                            onClick={() => changePage(pageNum)}
-                            className={`relative inline-flex items-center px-3 md:px-5 py-1 md:py-2 border border-gray-400 dark:border-gray-600 text-sm md:text-base font-medium ${
-                              currentPage === pageNum
-                                ? 'text-white bg-blue-600 dark:bg-blue-700'
-                                : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        ) : null;
-                      })}
-                      
-                      <button
-                        onClick={() => changePage(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className={`relative inline-flex items-center px-2 md:px-4 py-1 md:py-2 rounded-r-md border border-gray-400 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm md:text-base font-medium ${
-                          currentPage === totalPages 
-                            ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed' 
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                        }`}
-                      >
-                        Next
-                      </button>
-                    </nav>
-                  </div>
-                )}
-              </>
-            )}
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowConfirmDialog(false)}
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={executeTransaction}
+              disabled={loading}
+              className={`flex-1 px-4 py-2 ${
+                pendingTransaction.type === 'deposit' 
+                  ? 'bg-green-500 hover:bg-green-600' 
+                  : 'bg-red-500 hover:bg-red-600'
+              } text-white rounded transition-colors disabled:opacity-50`}
+            >
+              {loading ? 'Processing...' : 'Confirm'}
+            </button>
           </div>
         </div>
       </div>
-    </>
+    );
+  };
+  
+  return (
+    <div className={`min-h-screen ${getBgColor('main')} transition-colors duration-300`}>
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className={`text-3xl font-bold ${getTextColor('primary')}`}>
+            Wallet Management
+          </h1>
+          <div className="flex gap-2">
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors"
+            >
+              ← Back
+            </button>
+            <button
+              onClick={() => setBulkMode(!bulkMode)}
+              className={`px-4 py-2 ${
+                bulkMode ? 'bg-purple-500 hover:bg-purple-600' : 'bg-blue-500 hover:bg-blue-600'
+              } text-white rounded transition-colors`}
+            >
+              {bulkMode ? 'Single Mode' : 'Bulk Mode'}
+            </button>
+          </div>
+        </div>
+        
+        {/* Message Display */}
+        {message.text && (
+          <div className={`mb-6 p-4 rounded-lg ${
+            message.type === 'success' 
+              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+              : message.type === 'warning'
+              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+              : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+          }`}>
+            {message.text}
+          </div>
+        )}
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Transaction Form */}
+          <div className={`${getBgColor('card')} rounded-lg shadow-lg p-6`}>
+            <h2 className={`text-xl font-semibold ${getTextColor('primary')} mb-4`}>
+              {bulkMode ? 'Bulk Transaction' : 'Single Transaction'}
+            </h2>
+            
+            {/* Transaction Type Toggle */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setTransactionType('deposit')}
+                className={`flex-1 px-4 py-2 rounded ${
+                  transactionType === 'deposit'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                } transition-colors`}
+              >
+                ➕ Deposit
+              </button>
+              <button
+                onClick={() => setTransactionType('deduct')}
+                className={`flex-1 px-4 py-2 rounded ${
+                  transactionType === 'deduct'
+                    ? 'bg-red-500 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                } transition-colors`}
+              >
+                ➖ Deduct
+              </button>
+            </div>
+            
+            {!bulkMode ? (
+              // Single User Selection
+              <div className="mb-4">
+                <label className={`block text-sm font-medium ${getTextColor('secondary')} mb-2`}>
+                  Select User
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search by name, email, or phone..."
+                    className={`w-full px-4 py-2 rounded border ${getBgColor('input')} ${
+                      darkMode ? 'border-gray-600' : 'border-gray-300'
+                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  />
+                  
+                  {/* Search Results Dropdown */}
+                  {users.length > 0 && (
+                    <div className={`absolute z-10 w-full mt-1 ${getBgColor('card')} rounded-lg shadow-lg max-h-60 overflow-y-auto`}>
+                      {users.map(user => (
+                        <div
+                          key={user._id}
+                          onClick={() => selectUser(user)}
+                          className={`p-3 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-200 dark:border-gray-700`}
+                        >
+                          <div className={getTextColor('primary')}>{user.name}</div>
+                          <div className={`text-sm ${getTextColor('muted')}`}>{user.email}</div>
+                          <div className={`text-sm ${getTextColor('secondary')}`}>
+                            Balance: {formatCurrency(user.walletBalance)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Selected User Display */}
+                {selectedUser && (
+                  <div className={`mt-3 p-3 bg-blue-100 dark:bg-blue-900/30 rounded`}>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className={`font-medium ${getTextColor('primary')}`}>{selectedUser.name}</p>
+                        <p className={`text-sm ${getTextColor('secondary')}`}>{selectedUser.email}</p>
+                        <p className={`text-sm font-bold ${getTextColor('primary')} mt-1`}>
+                          Current Balance: {formatCurrency(selectedUser.walletBalance)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setSelectedUser(null)}
+                        className="text-red-500 hover:text-red-600"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Bulk User Selection
+              <div className="mb-4">
+                <label className={`block text-sm font-medium ${getTextColor('secondary')} mb-2`}>
+                  Select Users ({selectedUsers.length} selected)
+                </label>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search users to add..."
+                  className={`w-full px-4 py-2 rounded border ${getBgColor('input')} ${
+                    darkMode ? 'border-gray-600' : 'border-gray-300'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                />
+                
+                {/* Search Results for Bulk */}
+                {users.length > 0 && (
+                  <div className={`mt-2 ${getBgColor('card')} rounded-lg shadow-lg max-h-40 overflow-y-auto`}>
+                    {users.map(user => (
+                      <div
+                        key={user._id}
+                        onClick={() => toggleUserSelection(user)}
+                        className={`p-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
+                          selectedUsers.some(u => u._id === user._id) 
+                            ? 'bg-blue-100 dark:bg-blue-900/30' 
+                            : ''
+                        }`}
+                      >
+                        <div className="flex justify-between">
+                          <div>
+                            <span className={getTextColor('primary')}>{user.name}</span>
+                            <span className={`ml-2 text-sm ${getTextColor('muted')}`}>
+                              {formatCurrency(user.walletBalance)}
+                            </span>
+                          </div>
+                          {selectedUsers.some(u => u._id === user._id) && (
+                            <span className="text-green-500">✓</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Selected Users List */}
+                {selectedUsers.length > 0 && (
+                  <div className={`mt-3 p-3 bg-purple-100 dark:bg-purple-900/30 rounded max-h-32 overflow-y-auto`}>
+                    {selectedUsers.map(user => (
+                      <div key={user._id} className="flex justify-between items-center py-1">
+                        <span className={`text-sm ${getTextColor('primary')}`}>{user.name}</span>
+                        <button
+                          onClick={() => toggleUserSelection(user)}
+                          className="text-red-500 hover:text-red-600 text-sm"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Amount Input */}
+            <div className="mb-4">
+              <label className={`block text-sm font-medium ${getTextColor('secondary')} mb-2`}>
+                Amount (GH₵)
+              </label>
+              <input
+                type="number"
+                value={bulkMode ? bulkAmount : amount}
+                onChange={(e) => bulkMode ? setBulkAmount(e.target.value) : setAmount(e.target.value)}
+                placeholder="0.00"
+                min="0.01"
+                step="0.01"
+                className={`w-full px-4 py-2 rounded border ${getBgColor('input')} ${
+                  darkMode ? 'border-gray-600' : 'border-gray-300'
+                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              />
+            </div>
+            
+            {/* Description Input */}
+            <div className="mb-4">
+              <label className={`block text-sm font-medium ${getTextColor('secondary')} mb-2`}>
+                Description
+              </label>
+              <textarea
+                value={bulkMode ? bulkDescription : description}
+                onChange={(e) => bulkMode ? setBulkDescription(e.target.value) : setDescription(e.target.value)}
+                placeholder="Enter transaction description..."
+                rows="2"
+                className={`w-full px-4 py-2 rounded border ${getBgColor('input')} ${
+                  darkMode ? 'border-gray-600' : 'border-gray-300'
+                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              />
+            </div>
+            
+            {/* Reason (for deductions) */}
+            {transactionType === 'deduct' && (
+              <div className="mb-4">
+                <label className={`block text-sm font-medium ${getTextColor('secondary')} mb-2`}>
+                  Reason for Deduction
+                </label>
+                <textarea
+                  value={bulkMode ? bulkReason : reason}
+                  onChange={(e) => bulkMode ? setBulkReason(e.target.value) : setReason(e.target.value)}
+                  placeholder="Explain why funds are being deducted..."
+                  rows="2"
+                  className={`w-full px-4 py-2 rounded border ${getBgColor('input')} ${
+                    darkMode ? 'border-gray-600' : 'border-gray-300'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                />
+              </div>
+            )}
+            
+            {/* Submit Button */}
+            <button
+              onClick={initiateTransaction}
+              disabled={loading}
+              className={`w-full px-4 py-3 ${
+                transactionType === 'deposit' 
+                  ? 'bg-green-500 hover:bg-green-600' 
+                  : 'bg-red-500 hover:bg-red-600'
+              } text-white rounded font-medium transition-colors disabled:opacity-50`}
+            >
+              {loading 
+                ? 'Processing...' 
+                : `${transactionType === 'deposit' ? 'Add' : 'Deduct'} Funds`
+              }
+            </button>
+          </div>
+          
+          {/* Transaction History */}
+          {selectedUser && !bulkMode && (
+            <div className={`${getBgColor('card')} rounded-lg shadow-lg p-6`}>
+              <h2 className={`text-xl font-semibold ${getTextColor('primary')} mb-4`}>
+                Recent Transactions
+              </h2>
+              
+              {transactionHistory.length > 0 ? (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {transactionHistory.map((transaction, index) => (
+                    <div 
+                      key={transaction._id || index}
+                      className={`p-3 rounded border ${
+                        darkMode ? 'border-gray-700' : 'border-gray-200'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className={`font-medium ${
+                          transaction.type === 'deposit' 
+                            ? 'text-green-600 dark:text-green-400' 
+                            : transaction.type === 'purchase'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {transaction.type === 'deposit' ? '➕' : transaction.type === 'purchase' ? '🛒' : '➖'}
+                          {' '}{transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
+                        </span>
+                        <span className={`font-bold ${getTextColor('primary')}`}>
+                          {transaction.type === 'deduction' ? '-' : ''}
+                          {formatCurrency(Math.abs(transaction.amount))}
+                        </span>
+                      </div>
+                      <p className={`text-sm ${getTextColor('secondary')}`}>
+                        {transaction.description}
+                      </p>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className={`text-xs ${getTextColor('muted')}`}>
+                          {formatDate(transaction.createdAt)}
+                        </span>
+                        <span className={`text-xs ${getTextColor('muted')}`}>
+                          Balance: {formatCurrency(transaction.balanceAfter)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-center ${getTextColor('muted')}`}>
+                  No recent transactions
+                </p>
+              )}
+            </div>
+          )}
+          
+          {/* Bulk Mode Info */}
+          {bulkMode && (
+            <div className={`${getBgColor('card')} rounded-lg shadow-lg p-6`}>
+              <h2 className={`text-xl font-semibold ${getTextColor('primary')} mb-4`}>
+                Bulk Operation Summary
+              </h2>
+              
+              <div className="space-y-4">
+                <div className={`p-4 bg-blue-100 dark:bg-blue-900/30 rounded`}>
+                  <p className={`text-sm ${getTextColor('muted')}`}>Selected Users</p>
+                  <p className={`text-2xl font-bold ${getTextColor('primary')}`}>
+                    {selectedUsers.length}
+                  </p>
+                </div>
+                
+                {bulkAmount && selectedUsers.length > 0 && (
+                  <div className={`p-4 bg-green-100 dark:bg-green-900/30 rounded`}>
+                    <p className={`text-sm ${getTextColor('muted')}`}>Total Transaction</p>
+                    <p className={`text-2xl font-bold ${getTextColor('primary')}`}>
+                      {formatCurrency(parseFloat(bulkAmount || 0) * selectedUsers.length)}
+                    </p>
+                    <p className={`text-sm ${getTextColor('muted')} mt-1`}>
+                      {formatCurrency(bulkAmount)} × {selectedUsers.length} users
+                    </p>
+                  </div>
+                )}
+                
+                <div className={`p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded`}>
+                  <p className={`font-medium ${getTextColor('primary')} mb-2`}>⚠️ Important Notes:</p>
+                  <ul className={`text-sm ${getTextColor('secondary')} space-y-1`}>
+                    <li>• Bulk operations cannot be undone</li>
+                    <li>• Users with insufficient balance will be skipped for deductions</li>
+                    <li>• All transactions will be logged individually</li>
+                    <li>• You'll receive a summary after completion</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog />
+    </div>
   );
-}
+};
+
+export default WalletManagement;
