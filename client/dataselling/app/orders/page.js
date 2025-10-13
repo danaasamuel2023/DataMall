@@ -65,7 +65,7 @@ const UserOrdersHistory = () => {
     setStatusModal({ isOpen: true, data: null, loading: true, error: null });
 
     try {
-      const response = await axios.get(`https://datamartbackened.onrender.com/api/developer/order-status/${reference}`, {
+      const response = await axios.get(`https://api.datamartgh.shop/api/developer/order-status/${reference}`, {
         headers: {
           'x-api-key': API_KEY
         }
