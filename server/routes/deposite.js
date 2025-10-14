@@ -22,6 +22,7 @@ const FEE_PERCENTAGE = 0.02; // 2% fee - adjust as needed
 const SMS_CONFIG = {
   API_KEY: process.env.MNOTIFY_API_KEY,
   SENDER_ID: 'DataMallGH',
+  FRAUD_SENDER_ID: 'DatamartGh', // ✅ Different sender ID for fraud alerts
   BASE_URL: 'https://apps.mnotify.net/smsapi'
 };
 
@@ -56,6 +57,88 @@ const sendDepositSMS = async (user, amount, newBalance) => {
     return { success: true };
   } catch (error) {
     console.error('SMS Error:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * ✅ NEW: Send fraud alert SMS
+ */
+const sendFraudAlertSMS = async (user, reference, expectedAmount, actualAmountPaid) => {
+  try {
+    if (!SMS_CONFIG.API_KEY) {
+      console.log('SMS not configured for fraud alerts');
+      return { success: false, message: 'SMS not configured' };
+    }
+
+    const formatPhoneNumber = (phone) => {
+      if (!phone) return '';
+      let cleaned = phone.replace(/\D/g, '');
+      if (cleaned.startsWith('0')) cleaned = '233' + cleaned.substring(1);
+      if (!cleaned.startsWith('233')) cleaned = '233' + cleaned;
+      return cleaned;
+    };
+
+    const formattedPhone = formatPhoneNumber(user.phoneNumber);
+    if (!formattedPhone || formattedPhone.length < 12) {
+      throw new Error('Invalid phone number format');
+    }
+
+    // ✅ Fraud alert message
+    const message = `⚠️ SECURITY ALERT: Suspicious transaction detected on your DataMall account. Ref: ${reference}. Expected: GHS ${expectedAmount.toFixed(2)}, Received: GHS ${actualAmountPaid.toFixed(2)}. Transaction blocked. Contact support if this wasn't you.`;
+    
+    const url = `${SMS_CONFIG.BASE_URL}?key=${SMS_CONFIG.API_KEY}&to=${formattedPhone}&msg=${encodeURIComponent(message)}&sender_id=${SMS_CONFIG.FRAUD_SENDER_ID}`;
+    
+    const response = await axios.get(url);
+    console.log('🚨 Fraud alert SMS sent successfully to user');
+    return { success: true };
+  } catch (error) {
+    console.error('Fraud Alert SMS Error:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * ✅ NEW: Send fraud alert to admin/support team
+ */
+const sendFraudAlertToAdmin = async (user, reference, expectedAmount, actualAmountPaid, transaction) => {
+  try {
+    if (!SMS_CONFIG.API_KEY) {
+      console.log('SMS not configured for admin fraud alerts');
+      return { success: false, message: 'SMS not configured' };
+    }
+
+    // ✅ Admin phone numbers - configure these in your environment
+    const adminPhones = (process.env.ADMIN_FRAUD_ALERT_PHONES || '').split(',').filter(Boolean);
+    
+    if (adminPhones.length === 0) {
+      console.log('No admin phones configured for fraud alerts');
+      return { success: false, message: 'No admin phones configured' };
+    }
+
+    const formatPhoneNumber = (phone) => {
+      let cleaned = phone.replace(/\D/g, '');
+      if (cleaned.startsWith('0')) cleaned = '233' + cleaned.substring(1);
+      if (!cleaned.startsWith('233')) cleaned = '233' + cleaned;
+      return cleaned;
+    };
+
+    // ✅ Detailed fraud alert for admins
+    const difference = (actualAmountPaid - expectedAmount).toFixed(2);
+    const message = `🚨 FRAUD DETECTED! User: ${user.name} (${user.email}). Ref: ${reference}. Expected: GHS ${expectedAmount.toFixed(2)}, Got: GHS ${actualAmountPaid.toFixed(2)}. Diff: GHS ${difference}. Action: BLOCKED`;
+    
+    // Send to all admin phones
+    const promises = adminPhones.map(async (phone) => {
+      const formattedPhone = formatPhoneNumber(phone);
+      const url = `${SMS_CONFIG.BASE_URL}?key=${SMS_CONFIG.API_KEY}&to=${formattedPhone}&msg=${encodeURIComponent(message)}&sender_id=${SMS_CONFIG.FRAUD_SENDER_ID}`;
+      return axios.get(url);
+    });
+
+    await Promise.all(promises);
+    console.log('🚨 Fraud alert SMS sent to admin team');
+    return { success: true };
+  } catch (error) {
+    console.error('Admin Fraud Alert SMS Error:', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -253,6 +336,18 @@ async function processSuccessfulPayment(reference) {
         fraudDetectedAt: new Date()
       };
       await transaction.save();
+
+      // ✅ NEW: Send fraud alert SMS notifications
+      const user = await User.findById(transaction.userId);
+      if (user) {
+        // Send alert to user
+        sendFraudAlertSMS(user, reference, expectedAmount, actualAmountPaid)
+          .catch(err => console.error('Failed to send fraud alert SMS to user:', err));
+        
+        // Send alert to admin team
+        sendFraudAlertToAdmin(user, reference, expectedAmount, actualAmountPaid, transaction)
+          .catch(err => console.error('Failed to send fraud alert SMS to admin:', err));
+      }
       
       return { 
         success: false, 
