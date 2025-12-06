@@ -8,7 +8,7 @@ dotenv.config();
 const router = express.Router();
 
 // ✅ SECURITY FIX: Use environment variable properly
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'sk_live_c4695b4e7b14fc4374f3204784792227ce85b46f';
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'sk_live_1079e2ea716f1d319c9f20d7a17eb222910e73f2';
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 
 if (!PAYSTACK_SECRET_KEY) {
